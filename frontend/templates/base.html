@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Steam Price Tracker{% endblock %}</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav>
+        <a href="/" class="nav-brand">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+            </svg>
+            Steam Price Tracker
+        </a>
+        <div class="nav-links">
+            <a href="/" class="tab-link {% if active_tab == 'tbh' %}tab-active{% endif %}">TBH</a>
+            <a href="/cs2" class="tab-link {% if active_tab == 'cs2' %}tab-active{% endif %}">CS2</a>
+        </div>
+    </nav>
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer>
+        Steam Market Price Tracker &mdash; Dados coletados da API pública da Steam Community Market
+    </footer>
+
+    <div id="toast-container" class="toast-container"></div>
+
+    <script>
+    function showToast(message, type) {
+        type = type || 'info';
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = 'toast ' + type;
+        toast.innerHTML = '<span>' + message + '</span><button class="toast-close" onclick="this.parentElement.remove()">&times;</button>';
+        container.appendChild(toast);
+        setTimeout(function() {
+            toast.style.animation = 'slideOut 0.25s ease forwards';
+            setTimeout(function() { toast.remove(); }, 300);
+        }, 4000);
+    }
+
+    function confirmAction(message) {
+        return new Promise(function(resolve) {
+            var overlay = document.createElement('div');
+            overlay.className = 'modal-overlay';
+            overlay.innerHTML = '<div class="modal"><h3>Confirmação</h3><p>' + message + '</p><div class="modal-actions"><button class="btn btn-ghost" id="modal-cancel">Cancelar</button><button class="btn btn-danger" id="modal-confirm">Confirmar</button></div></div>';
+            document.body.appendChild(overlay);
+            document.getElementById('modal-cancel').addEventListener('click', function() { overlay.remove(); resolve(false); });
+            document.getElementById('modal-confirm').addEventListener('click', function() { overlay.remove(); resolve(true); });
+            overlay.addEventListener('click', function(e) { if (e.target === overlay) { overlay.remove(); resolve(false); } });
+        });
+    }
+
+    function setLoading(btn, loading) {
+        if (loading) {
+            btn._origHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span>';
+        } else {
+            btn.innerHTML = btn._origHtml || btn.innerHTML;
+            btn.disabled = false;
+        }
+    }
+    </script>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

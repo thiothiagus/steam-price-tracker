@@ -1,0 +1,318 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Steam Price Tracker{% endblock %}
+{% block content %}
+
+<div class="stats-grid">
+    <div class="stat-card accent">
+        <span class="stat-label">Valor Total do Inventário</span>
+        <span class="stat-value">{{ "R$ %.2f"|format(stats.total_inventory_value) if stats.total_inventory_value > 0 else "—" }}</span>
+        <span class="stat-sub">{{ stats.items_with_price }}/{{ stats.total_items }} itens com preço</span>
+    </div>
+    <div class="stat-card success">
+        <span class="stat-label">Itens Monitorados</span>
+        <span class="stat-value">{{ stats.total_items }}</span>
+        <span class="stat-sub">{{ stats.total_quantity }} unidades no total</span>
+    </div>
+    <div class="stat-card {{ 'danger' if stats.highest_value_item else 'success' }}">
+        <span class="stat-label">Item Mais Valioso</span>
+        <span class="stat-value" style="font-size:0.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ stats.highest_value_item if stats.highest_value_item else "—" }}</span>
+        <span class="stat-sub">{{ "R$ %.2f"|format(stats.highest_value) if stats.highest_value > 0 else "—" }}</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-label">Preço Médio por Item</span>
+        <span class="stat-value">{{ "R$ %.2f"|format(stats.avg_item_price) if stats.avg_item_price > 0 else "—" }}</span>
+    </div>
+</div>
+
+<div class="toolbar">
+    <div class="toolbar-left">
+        <div class="search-bar">
+            <input type="text" id="search-input" placeholder="Buscar item..." oninput="filterItems(this.value)">
+        </div>
+        <span id="item-count" class="badge badge-info">{{ items|length }} itens</span>
+    </div>
+    <div class="toolbar-right">
+        <span id="watcher-status" class="badge badge-inactive" style="cursor:pointer" onclick="toggleWatcher()" title="Clique para ligar/desligar">Watcher: —</span>
+        <button class="btn btn-primary" onclick="importSave()">Importar Save</button>
+        
+    </div>
+</div>
+
+{% if items %}
+<div class="table-wrapper">
+    <table>
+        <thead>
+            <tr>
+                <th onclick="sortTable('name')" style="cursor:pointer">Item ▾</th>
+                <th onclick="sortTable('quantity')" style="cursor:pointer">Qtd ▾</th>
+                <th onclick="sortTable('price')" style="cursor:pointer">Preço Unit. ▾</th>
+                <th onclick="sortTable('total')" style="cursor:pointer">Total ▾</th>
+                <th onclick="sortTable('status')" style="cursor:pointer">Status ▾</th>
+            </tr>
+        </thead>
+        <tbody id="items-tbody">
+            {% for item in items %}
+            <tr class="item-row" data-name="{{ item.market_hash_name|lower }}" data-collected-at="{{ item.collected_at or '' }}">
+                <td>
+                    {% if item.icon_url %}
+                    <img src="{{ item.icon_url }}" alt="" class="item-icon" loading="lazy">
+                    {% elif item.grade_color %}
+                    <span class="rarity-dot" style="background:{{ item.grade_color }}"></span>
+                    {% endif %}
+                    <a href="/items/{{ item.id }}" class="item-name" {% if item.grade_color %}style="color:{{ item.grade_color }}"{% endif %}>{{ item.market_hash_name }}</a>
+                </td>
+                <td>{{ item.quantity }}</td>
+                <td class="price-neutral">
+                    {{ "R$ %.2f"|format(item.latest_price) if item.latest_price else "—" }}
+                </td>
+                <td class="{% if item.total_price %}price-neutral{% endif %}">
+                    {{ "R$ %.2f"|format(item.total_price) if item.total_price else "—" }}
+                </td>
+                <td>
+                    {% if item.freshness == "fresh" %}
+                    <span class="badge badge-active">Recente</span>
+                    {% elif item.freshness == "ok" %}
+                    <span class="badge badge-warning">Ok</span>
+                    {% elif item.freshness == "stale" %}
+                    <span class="badge badge-inactive">Antigo</span>
+                    {% else %}
+                    <span class="badge badge-neutral">Sem preço</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="empty-state">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+    </svg>
+    <h3>Nenhum item monitorado</h3>
+    <p>Adicione itens manualmente ou importe do save do TBH para começar.</p>
+</div>
+{% endif %}
+
+<div id="import-result" class="card" style="display:none"></div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const BASE = '/api';
+const FRESH_THRESHOLD = 6; // hours before "Recente" becomes "Ok"
+const STALE_THRESHOLD = {{ refresh_hours }};
+
+function relativeTime(iso) {
+    if (!iso) return '—';
+    const now = new Date();
+    const d = new Date(iso);
+    const diff = (now - d) / 1000;
+    if (diff < 0) return 'agora';
+    if (diff < 60) return 'agora';
+    if (diff < 3600) return Math.floor(diff / 60) + 'min';
+    if (diff < 86400) return Math.floor(diff / 3600) + 'h';
+    const days = Math.floor(diff / 86400);
+    return days + 'd';
+}
+
+function renderRelativeTimes() {
+    document.querySelectorAll('.relative-time').forEach(function(el) {
+        el.textContent = relativeTime(el.dataset.iso);
+    });
+}
+
+function refreshFreshness() {
+    const now = new Date();
+    document.querySelectorAll('.item-row').forEach(function(row) {
+        const badge = row.querySelector('.badge');
+        if (!badge || badge.id) return;
+        const iso = row.dataset.collectedAt;
+        if (!iso) {
+            badge.className = 'badge badge-neutral';
+            badge.textContent = 'Sem preço';
+            return;
+        }
+        const d = new Date(iso);
+        const hours = (now - d) / 3600000;
+        if (hours < FRESH_THRESHOLD) {
+            badge.className = 'badge badge-active';
+            badge.textContent = 'Recente';
+        } else if (hours < STALE_THRESHOLD) {
+            badge.className = 'badge badge-warning';
+            badge.textContent = 'Ok';
+        } else {
+            badge.className = 'badge badge-inactive';
+            badge.textContent = 'Antigo';
+        }
+    });
+}
+
+
+
+function filterItems(query) {
+    const q = query.toLowerCase();
+    document.querySelectorAll('.item-row').forEach(function(row) {
+        row.style.display = row.dataset.name.includes(q) ? '' : 'none';
+    });
+}
+
+var sortDirection = {};
+
+function sortTable(column) {
+    console.log('Sorting by:', column);
+    var tbody = document.getElementById('items-tbody');
+    var rows = Array.from(tbody.querySelectorAll('.item-row'));
+    
+    sortDirection[column] = sortDirection[column] === 'asc' ? 'desc' : 'asc';
+    var direction = sortDirection[column];
+    
+    rows.sort(function(a, b) {
+        var aVal, bVal;
+        
+        if (column === 'name') {
+            aVal = a.dataset.name;
+            bVal = b.dataset.name;
+        } else if (column === 'quantity') {
+            aVal = parseInt(a.cells[1].textContent.trim()) || 0;
+            bVal = parseInt(b.cells[1].textContent.trim()) || 0;
+        } else if (column === 'price') {
+            var aText = a.cells[2].textContent.trim();
+            var bText = b.cells[2].textContent.trim();
+            aVal = aText === '—' ? 0 : parseFloat(aText.replace('R$ ', '').replace(',', '.'));
+            bVal = bText === '—' ? 0 : parseFloat(bText.replace('R$ ', '').replace(',', '.'));
+        } else if (column === 'total') {
+            var aText = a.cells[3].textContent.trim();
+            var bText = b.cells[3].textContent.trim();
+            aVal = aText === '—' ? 0 : parseFloat(aText.replace('R$ ', '').replace(',', '.'));
+            bVal = bText === '—' ? 0 : parseFloat(bText.replace('R$ ', '').replace(',', '.'));
+        } else if (column === 'status') {
+            var statusOrder = {'Recente': 1, 'Ok': 2, 'Antigo': 3, 'Sem preço': 4};
+            aVal = statusOrder[a.cells[4].querySelector('.badge').textContent.trim()] || 99;
+            bVal = statusOrder[b.cells[4].querySelector('.badge').textContent.trim()] || 99;
+        }
+        
+        if (aVal < bVal) return direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return direction === 'asc' ? 1 : -1;
+        return 0;
+    });
+    
+    rows.forEach(function(row) {
+        tbody.appendChild(row);
+    });
+    
+    document.querySelectorAll('th').forEach(function(th) {
+        th.textContent = th.textContent.replace(' ▴', '').replace(' ▾', '') + ' ▾';
+    });
+    
+    var headers = ['Item ▾', 'Qtd ▾', 'Preço Unit. ▾', 'Total ▾', 'Status ▾'];
+    var index = ['name', 'quantity', 'price', 'total', 'status'].indexOf(column);
+    document.querySelectorAll('th')[index].textContent = headers[index].replace(' ▾', '') + (direction === 'asc' ? ' ▴' : ' ▾');
+}
+
+async function toggleItem(id) {
+    const btn = event.target;
+    setLoading(btn, true);
+    const res = await fetch(BASE + '/items/' + id + '/toggle', {method: 'PATCH'});
+    if (res.ok) { showToast('Status alterado', 'info'); location.reload(); }
+    else { showToast('Erro ao alterar status', 'error'); }
+    setLoading(btn, false);
+}
+
+async function collectItem(id) {
+    const btn = event.target;
+    setLoading(btn, true);
+    const res = await fetch(BASE + '/items/' + id + '/collect', {method: 'POST'});
+    if (res.ok) showToast('Coleta concluída', 'success');
+    else showToast('Erro na coleta', 'error');
+    setLoading(btn, false);
+    setTimeout(function() { location.reload(); }, 2000);
+}
+
+async function deleteItem(id) {
+    const confirmed = await confirmAction('Excluir este item e todo seu histórico de preços?');
+    if (!confirmed) return;
+    const res = await fetch(BASE + '/items/' + id, {method: 'DELETE'});
+    if (res.ok) { showToast('Item excluído', 'info'); location.reload(); }
+    else { showToast('Erro ao excluir', 'error'); }
+}
+
+async function collectAll() {
+    showToast('Funcionalidade desativada', 'info');
+}
+
+
+
+async function previewImport() {
+    const res = await fetch(BASE + '/import-preview');
+    if (!res.ok) {
+        showToast('Save file não encontrado. Copie o SaveFile_Live.es3 para a raiz do projeto.', 'error');
+        return;
+    }
+    const data = await res.json();
+    const div = document.getElementById('import-result');
+    div.style.display = 'block';
+    div.style.borderColor = 'var(--info)';
+    div.innerHTML = '<div class="card-header"><h2>Preview - Itens do Save</h2><span class="badge badge-info">' + data.total_tradable_items + ' tipos (' + data.total_quantity + ' unidades)</span></div>' +
+        '<div class="table-wrapper"><table><thead><tr><th>ItemKey</th><th>Item</th><th>Grade</th><th>Tipo</th><th>Qtd</th><th>Status</th></tr></thead><tbody>' +
+        data.items.map(function(i) {
+            return '<tr><td>' + i.item_key + '</td><td>' + i.market_hash_name + '</td><td>' + i.grade + '</td><td>' + i.type + '</td><td>' + i.quantity + '</td><td>' +
+                (i.already_tracked
+                    ? '<span class="badge badge-inactive">Já importado</span>'
+                    : '<span class="badge badge-active">Novo</span>') +
+                '</td></tr>';
+        }).join('') + '</tbody></table></div>' +
+        '<div style="margin-top:1rem"><button class="btn btn-primary" onclick="importSave()">Importar Todos</button></div>';
+}
+
+async function importSave() {
+    const confirmed = await confirmAction('Importar itens negociáveis do save para o monitoramento?');
+    if (!confirmed) return;
+    const res = await fetch(BASE + '/import-save', {method: 'POST'});
+    if (!res.ok) {
+        showToast('Save file não encontrado. Copie o SaveFile_Live.es3 para a raiz do projeto.', 'error');
+        return;
+    }
+    const data = await res.json();
+    showToast(data.message, data.imported > 0 ? 'success' : 'info');
+    setTimeout(function() { location.reload(); }, 1500);
+}
+
+// SaveWatcher UI
+async function updateWatcherStatus() {
+    try {
+        const res = await fetch(BASE + '/watcher/status');
+        const data = await res.json();
+        const el = document.getElementById('watcher-status');
+        if (data.running) {
+            el.className = data.source_exists ? 'badge badge-active' : 'badge badge-inactive';
+            el.textContent = 'Watcher: ON' + (data.source_exists ? '' : ' (sem save)');
+            el.title = data.error || 'Monitorando: ' + data.source_path;
+        } else {
+            el.className = 'badge badge-inactive';
+            el.textContent = 'Watcher: OFF';
+            el.title = data.error || 'Clique para ligar';
+        }
+    } catch(e) {}
+}
+
+async function toggleWatcher() {
+    try {
+        const res = await fetch(BASE + '/watcher/status');
+        const data = await res.json();
+        const action = data.running ? 'stop' : 'start';
+        await fetch(BASE + '/watcher/' + action, {method: 'POST'});
+        updateWatcherStatus();
+        showToast('Watcher ' + (action === 'start' ? 'ligado' : 'desligado'), 'info');
+    } catch(e) {
+        showToast('Erro ao controlar watcher', 'error');
+    }
+}
+
+// Init
+updateWatcherStatus();
+setInterval(updateWatcherStatus, 15000);
+setInterval(refreshFreshness, 300000);
+</script>
+{% endblock %}

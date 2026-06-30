@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+{% block title %}{{ item.market_hash_name }} - Steam Price Tracker{% endblock %}
+{% block content %}
+
+<a href="/" class="back-link">&larr; Voltar ao Dashboard</a>
+
+<div class="detail-header">
+    <div style="display:flex;align-items:center;gap:0.75rem">
+        {% if icon_url %}
+        <img src="{{ icon_url }}" alt="" class="item-icon-lg" loading="lazy">
+        {% endif %}
+        <div>
+            <h1 {% if grade_color %}style="color:{{ grade_color }}"{% endif %}>{{ item.market_hash_name }}</h1>
+            <div class="item-meta">
+                <span>AppID: <strong>{{ item.appid }}</strong></span>
+                {% if grade %}
+                <span>Grade: <strong {% if grade_color %}style="color:{{ grade_color }}"{% endif %}>{{ grade }}</strong></span>
+                {% endif %}
+                <span>Status: <strong>{{ "Ativo" if item.enabled else "Inativo" }}</strong></span>
+                <span>Coletas: <strong>{{ price_stats.count }}</strong></span>
+            </div>
+        </div>
+    </div>
+    <div style="display:flex;gap:0.5rem">
+        <button class="btn btn-success btn-sm" onclick="collectItem({{ item.id }})">Coletar Agora</button>
+        <button class="btn btn-sm" onclick="toggleItem({{ item.id }})">{{ "Desativar" if item.enabled else "Ativar" }}</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteItem({{ item.id }})">Excluir</button>
+    </div>
+</div>
+
+{% if price_stats.latest %}
+<div class="price-summary">
+    <div class="stat-card success">
+        <span class="stat-label">Menor Preço</span>
+        <span class="stat-value">{{ "R$ %.2f"|format(price_stats.min) }}</span>
+    </div>
+    <div class="stat-card accent">
+        <span class="stat-label">Maior Preço</span>
+        <span class="stat-value">{{ "R$ %.2f"|format(price_stats.max) }}</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-label">Preço Médio</span>
+        <span class="stat-value">{{ "R$ %.2f"|format(price_stats.avg) }}</span>
+    </div>
+    <div class="stat-card warning">
+        <span class="stat-label">Último Preço</span>
+        <span class="stat-value">{{ "R$ %.2f"|format(price_stats.latest) }}</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-label">Volume Total</span>
+        <span class="stat-value">{{ price_stats.total_vol }}</span>
+    </div>
+</div>
+{% endif %}
+
+<div class="card">
+    <div class="card-header">
+        <h2>Gráfico de Preço</h2>
+        <div style="display:flex;gap:0.5rem;font-size:0.8rem">
+            <label style="display:flex;align-items:center;gap:0.25rem;cursor:pointer">
+                <input type="checkbox" id="show-lowest" checked onchange="updateChart()"> Menor Preço
+            </label>
+            <label style="display:flex;align-items:center;gap:0.25rem;cursor:pointer">
+                <input type="checkbox" id="show-median" checked onchange="updateChart()"> Preço Mediano
+            </label>
+        </div>
+    </div>
+    <div class="chart-wrapper">
+        <canvas id="priceChart" height="120"></canvas>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>Histórico de Preços</h2>
+        <span class="badge badge-info">{{ records|length }} registros</span>
+    </div>
+    {% if records %}
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>Data/Hora</th>
+                    <th>Menor Preço</th>
+                    <th>Preço Mediano</th>
+                    <th>Volume</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in records|reverse %}
+                <tr>
+                    <td style="font-size:0.8rem; color:var(--text-muted)">{{ r.collected_at.strftime("%d/%m/%Y %H:%M") }}</td>
+                    <td>{{ "R$ %.2f"|format(r.price) if r.price else "—" }}</td>
+                    <td>{{ "R$ %.2f"|format(r.median_price) if r.median_price else "—" }}</td>
+                    <td>{{ r.volume if r.volume else "—" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <p>Nenhum dado coletado ainda. Clique em "Coletar Agora" para buscar o preço atual.</p>
+    </div>
+    {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const labels = {{ chart_labels | tojson }};
+const prices = {{ chart_prices | tojson }};
+const medians = {{ chart_medians | tojson }};
+
+let chart;
+
+function buildChart() {
+    const ctx = document.getElementById('priceChart').getContext('2d');
+    const showLowest = document.getElementById('show-lowest').checked;
+    const showMedian = document.getElementById('show-median').checked;
+    const datasets = [];
+
+    if (showLowest) {
+        datasets.push({
+            label: 'Menor Preço',
+            data: prices,
+            borderColor: '#58a6ff',
+            backgroundColor: 'rgba(88,166,255,0.08)',
+            fill: true,
+            tension: 0.3,
+            spanGaps: true,
+            pointRadius: 1,
+            pointHitRadius: 5,
+        });
+    }
+
+    if (showMedian) {
+        datasets.push({
+            label: 'Preço Mediano',
+            data: medians,
+            borderColor: '#d29922',
+            backgroundColor: 'rgba(210,153,34,0.08)',
+            fill: false,
+            tension: 0.3,
+            spanGaps: true,
+            pointRadius: 1,
+            pointHitRadius: 5,
+        });
+    }
+
+    if (chart) chart.destroy();
+
+    chart = new Chart(ctx, {
+        type: 'line',
+        data: { labels: labels, datasets: datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: { color: '#8b949e', boxWidth: 12, padding: 16 }
+                },
+                tooltip: {
+                    backgroundColor: '#1c2333',
+                    borderColor: '#30363d',
+                    borderWidth: 1,
+                    titleColor: '#e6edf3',
+                    bodyColor: '#e6edf3',
+                    padding: 10,
+                    cornerRadius: 6,
+                }
+            },
+            scales: {
+                x: {
+                    ticks: { color: '#6e7681', font: { size: 10 }, maxTicksLimit: 20 },
+                    grid: { color: 'rgba(48,54,61,0.3)' }
+                },
+                y: {
+                    beginAtZero: false,
+                    ticks: { color: '#6e7681', font: { size: 10 } },
+                    grid: { color: 'rgba(48,54,61,0.3)' }
+                }
+            }
+        }
+    });
+}
+
+function updateChart() {
+    buildChart();
+}
+
+document.addEventListener('DOMContentLoaded', buildChart);
+
+const BASE = '/api';
+
+async function collectItem(id) {
+    const res = await fetch(BASE + '/items/' + id + '/collect', {method: 'POST'});
+    if (res.ok) { showToast('Coleta concluída!', 'success'); location.reload(); }
+    else { showToast('Erro na coleta', 'error'); }
+}
+
+async function toggleItem(id) {
+    const res = await fetch(BASE + '/items/' + id + '/toggle', {method: 'PATCH'});
+    if (res.ok) { showToast('Status alterado', 'info'); location.reload(); }
+    else { showToast('Erro ao alterar status', 'error'); }
+}
+
+async function deleteItem(id) {
+    const confirmed = await confirmAction('Excluir este item e todo seu histórico de preços?');
+    if (!confirmed) return;
+    const res = await fetch(BASE + '/items/' + id, {method: 'DELETE'});
+    if (res.ok) { showToast('Item excluído', 'info'); window.location.href = '/'; }
+    else { showToast('Erro ao excluir', 'error'); }
+}
+</script>
+{% endblock %}
