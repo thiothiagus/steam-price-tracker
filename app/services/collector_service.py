@@ -23,12 +23,18 @@ def _get_items_to_collect(db: Session, force: bool = False) -> list[TrackedItem]
     to_collect = []
     for item in items:
         latest = (
-            db.query(PriceHistory.collected_at)
+            db.query(PriceHistory)
             .filter(PriceHistory.tracked_item_id == item.id)
             .order_by(PriceHistory.collected_at.desc())
             .first()
         )
-        if latest is None or latest[0] < cutoff:
+        if latest is None:
+            to_collect.append(item)
+        elif latest.collected_at.tzinfo is None:
+            collected_at = latest.collected_at.replace(tzinfo=timezone.utc)
+            if collected_at < cutoff:
+                to_collect.append(item)
+        elif latest.collected_at < cutoff:
             to_collect.append(item)
     return to_collect
 
@@ -47,6 +53,8 @@ async def collect_all_prices(force: bool = False) -> dict:
         if not items:
             msg = "Todos os itens já foram atualizados nas últimas %d horas." % REFRESH_HOURS
             logger.info(msg)
+            from app.state import collection_state
+            collection_state = {"collecting": False, "collected": 0, "total": 0, "last_collection": True}
             return {"success": True, "message": msg, "collected": 0, "total": 0}
 
         logger.info(
@@ -54,10 +62,14 @@ async def collect_all_prices(force: bool = False) -> dict:
             len(items), db.query(TrackedItem).filter(TrackedItem.enabled.is_(True)).count(),
         )
 
+        from app.state import collection_state
+        collection_state = {"collecting": True, "collected": 0, "total": len(items)}
+
         collected = 0
         for item in items:
             if collector.rate_limited_until > time.time():
                 logger.warning("Rate limit atingido. Coleta interrompida.")
+                collection_state["collecting"] = False
                 break
 
             result = await collector.fetch_price(item.appid, item.market_hash_name)
@@ -71,6 +83,7 @@ async def collect_all_prices(force: bool = False) -> dict:
                 )
                 db.add(record)
                 collected += 1
+                collection_state["collected"] = collected
                 logger.info(
                     "  [%d/%d] %s: R$ %.2f (vol=%s)",
                     collected, len(items),
@@ -84,12 +97,15 @@ async def collect_all_prices(force: bool = False) -> dict:
         if collected < len(items):
             msg += " Coleta interrompida por rate limit."
 
+        collection_state = {"collecting": False, "collected": collected, "total": len(items), "last_collection": True}
         logger.info("Coleta finalizada: %s", msg)
         return {"success": True, "message": msg, "collected": collected, "total": len(items)}
 
     except Exception:
         db.rollback()
         logger.exception("Erro durante coleta de preços.")
+        from app.state import collection_state
+        collection_state = {"collecting": False, "collected": 0, "total": 0}
         return {"success": False, "message": "Erro interno durante coleta."}
     finally:
         db.close()

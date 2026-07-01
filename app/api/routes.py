@@ -206,3 +206,16 @@ def import_preview():
         "total_quantity": sum(i["quantity"] for i in items),
         "items": items,
     }
+
+
+@router.get("/collection/status")
+def collection_status():
+    from app.state import collection_state
+    if collection_state is None:
+        return {"collecting": False, "collected": 0, "total": 0}
+    return {
+        "collecting": collection_state.get("collecting", False),
+        "collected": collection_state.get("collected", 0),
+        "total": collection_state.get("total", 0),
+        "last_collection": collection_state.get("last_collection"),
+    }

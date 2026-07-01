@@ -33,8 +33,22 @@
     </div>
     <div class="toolbar-right">
         <span id="watcher-status" class="badge badge-inactive" style="cursor:pointer" onclick="toggleWatcher()" title="Clique para ligar/desligar">Watcher: —</span>
+        <span id="collection-status" class="badge badge-neutral" style="display:none">
+            <span class="spinner spinner-sm"></span>
+            <span id="collection-text">Atualizando preços...</span>
+        </span>
         <button class="btn btn-primary" onclick="importSave()">Importar Save</button>
         
+    </div>
+</div>
+
+<div id="collection-progress" class="card" style="display:none; margin-bottom:1rem">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+        <strong id="progress-title">Atualizando preços...</strong>
+        <span id="progress-count" class="badge badge-info">0/0</span>
+    </div>
+    <div style="background:var(--border);border-radius:4px;height:8px;overflow:hidden">
+        <div id="progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s"></div>
     </div>
 </div>
 
@@ -313,6 +327,36 @@ async function toggleWatcher() {
 // Init
 updateWatcherStatus();
 setInterval(updateWatcherStatus, 15000);
+setInterval(checkCollectionStatus, 5000);
+
+async function checkCollectionStatus() {
+    try {
+        const res = await fetch(BASE + '/collection/status');
+        if (!res.ok) return;
+        const data = await res.json();
+        const badge = document.getElementById('collection-status');
+        const progress = document.getElementById('collection-progress');
+        const progressBar = document.getElementById('progress-bar');
+        const progressCount = document.getElementById('progress-count');
+        
+        if (data.collecting) {
+            badge.style.display = 'inline-flex';
+            progress.style.display = 'block';
+            document.getElementById('collection-text').textContent = 
+                data.collected + '/' + data.total + ' itens atualizados';
+            progressCount.textContent = data.collected + '/' + data.total;
+            const pct = data.total > 0 ? (data.collected / data.total * 100) : 0;
+            progressBar.style.width = pct + '%';
+        } else {
+            badge.style.display = 'none';
+            progress.style.display = 'none';
+            if (data.last_collection) {
+                showToast('Coleta concluída: ' + data.collected + ' itens atualizados', 'success');
+                setTimeout(function() { location.reload(); }, 2000);
+            }
+        }
+    } catch(e) {}
+}
 setInterval(refreshFreshness, 300000);
 </script>
 {% endblock %}

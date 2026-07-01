@@ -1,9 +1,10 @@
 import asyncio
 import logging
 import time
+from datetime import datetime
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.triggers.cron import CronTrigger
 
 from app.collectors.steam import collector
 from app.config import settings
@@ -16,22 +17,6 @@ logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
 
 
-def _get_collection_interval() -> int:
-    db = SessionLocal()
-    try:
-        count = db.query(TrackedItem).filter(TrackedItem.enabled.is_(True)).count()
-    finally:
-        db.close()
-
-    if count <= 20:
-        return 5
-    elif count <= 100:
-        return 15
-    elif count <= 500:
-        return 30
-    return 60
-
-
 async def scheduled_collect() -> None:
     if collector.rate_limited_until > time.time():
         remaining = int(collector.rate_limited_until - time.time())
@@ -42,18 +27,20 @@ async def scheduled_collect() -> None:
 
 
 def start_scheduler() -> None:
-    interval_minutes = _get_collection_interval()
+    if scheduler.running:
+        logger.info("Scheduler já está rodando.")
+        return
+    
     scheduler.add_job(
         scheduled_collect,
-        trigger=IntervalTrigger(minutes=interval_minutes),
+        trigger=CronTrigger(minute=0),
         id="price_collection",
         name="Collect Steam Market Prices",
         replace_existing=True,
     )
-    logger.info(
-        "Scheduler started. Collection every %s minutes.", interval_minutes
-    )
+    logger.info("Scheduler started. Collection at every hour (XX:00).")
     scheduler.start()
+    logger.info("Scheduler está rodando: %s", scheduler.running)
 
 
 def stop_scheduler() -> None:

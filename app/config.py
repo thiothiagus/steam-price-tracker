@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./steam_tracker.db"
     STEAM_CURRENCY: int = 7
     COLLECTOR_DELAY_SECONDS: float = 5.0
-    COLLECTOR_REFRESH_HOURS: int = 12
+    COLLECTOR_REFRESH_HOURS: int = 1
     COLLECTOR_MAX_RETRIES: int = 3
     COLLECTOR_BACKOFF_FACTOR: float = 3.0
     COLLECTOR_BASE_INTERVAL_MINUTES: int = 5

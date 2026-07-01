@@ -22,7 +22,16 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     init_db()
     logger.info("Database initialized.")
+    
     start_scheduler()
+    import app.state as state
+    from app.scheduler.tasks import scheduler
+    logger.info("Scheduler status after start: running=%s", scheduler.running)
+    
+    logger.info("Iniciando coleta inicial dos preços (apenas itens > 1h sem atualização)...")
+    from app.services.collector_service import collect_all_prices
+    await collect_all_prices(force=False)
+    logger.info("Coleta inicial concluída.")
 
     watcher = SaveWatcher(
         source_path=settings.save_source_path,
@@ -30,11 +39,12 @@ async def lifespan(app: FastAPI):
         cooldown_seconds=settings.SAVE_WATCHER_COOLDOWN_SECONDS,
         poll_interval=settings.SAVE_WATCHER_POLL_INTERVAL,
     )
-    import app.state as state
     state.save_watcher = watcher
     watcher.start()
+    logger.info("SaveWatcher started.")
 
     yield
+    logger.info("Shutting down...")
     watcher.stop()
     stop_scheduler()
     from app.collectors.steam import collector
