@@ -26,6 +26,7 @@ def get_db():
 
 
 def init_db() -> None:
+    from app.models import models
     Base.metadata.create_all(bind=engine)
     import sqlite3
     db_path = settings.DATABASE_URL.replace("sqlite:///", "./")

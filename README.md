@@ -10,10 +10,10 @@ Plataforma de monitoramento de preços que coleta dados periodicamente, armazena
 
 - Monitoramento automático de preços de itens da Steam
 - Histórico completo de preços com gráficos
-- Alertas de preço (em desenvolvimento)
 - Dashboard para visualização de dados
 - Coleta periódica com controle de rate limit
 - Suporte a múltiplos itens e jogos
+- Testes automatizados com pytest
 
 ## Stack Tecnológica
 
@@ -151,7 +151,8 @@ steam-price-tracker/
 - [x] Coleta de preços
 - [x] Histórico
 - [x] Gráficos básicos
-- [ ] Cadastro de itens via UI
+- [x] Cadastro de itens via UI
+- [x] Testes automatizados
 
 ### v2
 - [ ] Alertas (Discord, Telegram, Email)
