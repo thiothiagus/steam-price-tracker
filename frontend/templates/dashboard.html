@@ -29,7 +29,7 @@
         <div class="search-bar">
             <input type="text" id="search-input" placeholder="Buscar item..." oninput="filterItems(this.value)">
         </div>
-        <span id="item-count" class="badge badge-info">{{ items|length }} itens</span>
+        <span id="item-count" class="badge badge-info">{{ gears|length + materials|length }} itens ({{ gears|length }} gears, {{ materials|length }} materials)</span>
     </div>
     <div class="toolbar-right">
         <span id="watcher-status" class="badge badge-inactive" style="cursor:pointer" onclick="toggleWatcher()" title="Clique para ligar/desligar">Watcher: —</span>
@@ -52,55 +52,74 @@
     </div>
 </div>
 
+{% macro render_table(items, table_id, table_title, extra_cols=[]) %}
 {% if items %}
-<div class="table-wrapper">
-    <table>
-        <thead>
-            <tr>
-                <th onclick="sortTable('name')" style="cursor:pointer">Item ▾</th>
-                <th onclick="sortTable('quantity')" style="cursor:pointer">Qtd ▾</th>
-                <th onclick="sortTable('price')" style="cursor:pointer">Preço Unit. ▾</th>
-                <th onclick="sortTable('total')" style="cursor:pointer">Total ▾</th>
-                <th onclick="sortTable('status')" style="cursor:pointer">Status ▾</th>
-            </tr>
-        </thead>
-        <tbody id="items-tbody">
-            {% for item in items %}
-            <tr class="item-row" data-name="{{ item.market_hash_name|lower }}" data-collected-at="{{ item.collected_at or '' }}">
-                <td>
-                    {% if item.icon_url %}
-                    <img src="{{ item.icon_url }}" alt="" class="item-icon" loading="lazy">
-                    {% elif item.grade_color %}
-                    <span class="rarity-dot" style="background:{{ item.grade_color }}"></span>
-                    {% else %}
-                    <span class="rarity-dot" style="background:{{ '#888' if item.is_tbh_app else '#f60' }}"></span>
-                    {% endif %}
-                    <a href="/items/{{ item.id }}" class="item-name" {% if item.grade_color %}style="color:{{ item.grade_color }}"{% endif %}>{{ item.market_hash_name }}</a>
-                </td>
-                <td>{{ item.quantity }}</td>
-                <td class="price-neutral">
-                    {{ "R$ %.2f"|format(item.latest_price) if item.latest_price else "—" }}
-                </td>
-                <td class="{% if item.total_price %}price-neutral{% endif %}">
-                    {{ "R$ %.2f"|format(item.total_price) if item.total_price else "—" }}
-                </td>
-                <td>
-                    {% if item.freshness == "fresh" %}
-                    <span class="badge badge-active">Recente</span>
-                    {% elif item.freshness == "ok" %}
-                    <span class="badge badge-warning">Ok</span>
-                    {% elif item.freshness == "stale" %}
-                    <span class="badge badge-inactive">Antigo</span>
-                    {% else %}
-                    <span class="badge badge-neutral">Sem preço</span>
-                    {% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+<div class="table-section">
+    {% if table_title %}
+    <h3 class="table-title">{{ table_title }}</h3>
+    {% endif %}
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th onclick="sortTable('{{ table_id }}', 'name')" style="cursor:pointer">Item ▾</th>
+                    {% for col in extra_cols %}
+                    <th onclick="sortTable('{{ table_id }}', '{{ col.field }}')" style="cursor:pointer">{{ col.name }} ▾</th>
+                    {% endfor %}
+                    <th onclick="sortTable('{{ table_id }}', 'quantity')" style="cursor:pointer">Qtd ▾</th>
+                    <th onclick="sortTable('{{ table_id }}', 'price')" style="cursor:pointer">Preço Unit. ▾</th>
+                    <th onclick="sortTable('{{ table_id }}', 'total')" style="cursor:pointer">Total ▾</th>
+                    <th onclick="sortTable('{{ table_id }}', 'status')" style="cursor:pointer">Status ▾</th>
+                </tr>
+            </thead>
+            <tbody id="{{ table_id }}-tbody">
+                {% for item in items %}
+                <tr class="item-row" data-name="{{ item.market_hash_name|lower }}" data-collected-at="{{ item.collected_at or '' }}">
+                    <td>
+                        {% if item.icon_url %}
+                        <img src="{{ item.icon_url }}" alt="" class="item-icon" loading="lazy">
+                        {% elif item.grade_color %}
+                        <span class="rarity-dot" style="background:{{ item.grade_color }}"></span>
+                        {% else %}
+                        <span class="rarity-dot" style="background:{{ '#888' if item.is_tbh_app else '#f60' }}"></span>
+                        {% endif %}
+                        <a href="/items/{{ item.id }}" class="item-name" {% if item.grade_color %}style="color:{{ item.grade_color }}"{% endif %}>{{ item.market_hash_name }}</a>
+                        {% if item.is_equipped %}
+                        <span class="badge badge-equipped">Equipado</span>
+                        {% endif %}
+                    </td>
+                    {% for col in extra_cols %}
+                    <td>{{ item[col.field] if item[col.field] is not none else "—" }}</td>
+                    {% endfor %}
+                    <td>{{ item.quantity }}</td>
+                    <td class="price-neutral">
+                        {{ "R$ %.2f"|format(item.latest_price) if item.latest_price else "—" }}
+                    </td>
+                    <td class="{% if item.total_price %}price-neutral{% endif %}">
+                        {{ "R$ %.2f"|format(item.total_price) if item.total_price else "—" }}
+                    </td>
+                    <td>
+                        {% if item.freshness == "fresh" %}
+                        <span class="badge badge-active">Recente</span>
+                        {% elif item.freshness == "ok" %}
+                        <span class="badge badge-warning">Ok</span>
+                        {% elif item.freshness == "stale" %}
+                        <span class="badge badge-inactive">Antigo</span>
+                        {% else %}
+                        <span class="badge badge-neutral">Sem preço</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
-{% else %}
+{% endif %}
+{% endmacro %}
+
+{% set total_items = gears|length + materials|length %}
+{% if total_items == 0 %}
 <div class="empty-state">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
@@ -108,6 +127,9 @@
     <h3>Nenhum item monitorado</h3>
     <p>Adicione itens manualmente ou importe do save do TBH para começar.</p>
 </div>
+{% else %}
+{{ render_table(gears, 'gears', 'GEAR', [{'name': 'Tipo', 'field': 'gear_type'}, {'name': 'Nível', 'field': 'gear_level'}]) }}
+{{ render_table(materials, 'materials', 'MATERIAL') }}
 {% endif %}
 
 <div id="import-result" class="card" style="display:none"></div>
@@ -141,27 +163,31 @@ function renderRelativeTimes() {
 
 function refreshFreshness() {
     const now = new Date();
-    document.querySelectorAll('.item-row').forEach(function(row) {
-        const badge = row.querySelector('.badge');
-        if (!badge || badge.id) return;
-        const iso = row.dataset.collectedAt;
-        if (!iso) {
-            badge.className = 'badge badge-neutral';
-            badge.textContent = 'Sem preço';
-            return;
-        }
-        const d = new Date(iso);
-        const hours = (now - d) / 3600000;
-        if (hours < FRESH_THRESHOLD) {
-            badge.className = 'badge badge-active';
-            badge.textContent = 'Recente';
-        } else if (hours < STALE_THRESHOLD) {
-            badge.className = 'badge badge-warning';
-            badge.textContent = 'Ok';
-        } else {
-            badge.className = 'badge badge-inactive';
-            badge.textContent = 'Antigo';
-        }
+    ['gears-tbody', 'materials-tbody'].forEach(function(tbodyId) {
+        var tbody = document.getElementById(tbodyId);
+        if (!tbody) return;
+        tbody.querySelectorAll('.item-row').forEach(function(row) {
+            var badge = row.querySelector('.badge');
+            if (!badge || badge.id) return;
+            var iso = row.dataset.collectedAt;
+            if (!iso) {
+                badge.className = 'badge badge-neutral';
+                badge.textContent = 'Sem preço';
+                return;
+            }
+            var d = new Date(iso);
+            var hours = (now - d) / 3600000;
+            if (hours < FRESH_THRESHOLD) {
+                badge.className = 'badge badge-active';
+                badge.textContent = 'Recente';
+            } else if (hours < STALE_THRESHOLD) {
+                badge.className = 'badge badge-warning';
+                badge.textContent = 'Ok';
+            } else {
+                badge.className = 'badge badge-inactive';
+                badge.textContent = 'Antigo';
+            }
+        });
     });
 }
 
@@ -169,44 +195,65 @@ function refreshFreshness() {
 
 function filterItems(query) {
     const q = query.toLowerCase();
-    document.querySelectorAll('.item-row').forEach(function(row) {
-        row.style.display = row.dataset.name.includes(q) ? '' : 'none';
+    ['gears-tbody', 'materials-tbody'].forEach(function(tbodyId) {
+        const tbody = document.getElementById(tbodyId);
+        if (!tbody) return;
+        tbody.querySelectorAll('.item-row').forEach(function(row) {
+            row.style.display = row.dataset.name.includes(q) ? '' : 'none';
+        });
     });
 }
 
 var sortDirection = {};
 
-function sortTable(column) {
-    console.log('Sorting by:', column);
-    var tbody = document.getElementById('items-tbody');
+function sortTable(tableId, column) {
+    console.log('Sorting by:', tableId, column);
+    var tbody = document.getElementById(tableId + '-tbody');
     var rows = Array.from(tbody.querySelectorAll('.item-row'));
     
-    sortDirection[column] = sortDirection[column] === 'asc' ? 'desc' : 'asc';
-    var direction = sortDirection[column];
+    var hasExtraCol = tableId === 'gears';
+    var colOffset = hasExtraCol ? 2 : 0;
+    
+    sortDirection[tableId + '-' + column] = sortDirection[tableId + '-' + column] === 'asc' ? 'desc' : 'asc';
+    var direction = sortDirection[tableId + '-' + column];
     
     rows.sort(function(a, b) {
         var aVal, bVal;
+        var colIndex;
         
         if (column === 'name') {
             aVal = a.dataset.name;
             bVal = b.dataset.name;
+            colIndex = 0;
+        } else if (column === 'gear_type') {
+            aVal = a.cells[1].textContent.trim().toLowerCase();
+            bVal = b.cells[1].textContent.trim().toLowerCase();
+            colIndex = 1;
+        } else if (column === 'gear_level') {
+            aVal = parseInt(a.cells[2].textContent.trim()) || 0;
+            bVal = parseInt(b.cells[2].textContent.trim()) || 0;
+            colIndex = 2;
         } else if (column === 'quantity') {
-            aVal = parseInt(a.cells[1].textContent.trim()) || 0;
-            bVal = parseInt(b.cells[1].textContent.trim()) || 0;
+            aVal = parseInt(a.cells[1 + colOffset].textContent.trim()) || 0;
+            bVal = parseInt(b.cells[1 + colOffset].textContent.trim()) || 0;
+            colIndex = 1;
         } else if (column === 'price') {
-            var aText = a.cells[2].textContent.trim();
-            var bText = b.cells[2].textContent.trim();
+            var aText = a.cells[2 + colOffset].textContent.trim();
+            var bText = b.cells[2 + colOffset].textContent.trim();
             aVal = aText === '—' ? 0 : parseFloat(aText.replace('R$ ', '').replace(',', '.'));
             bVal = bText === '—' ? 0 : parseFloat(bText.replace('R$ ', '').replace(',', '.'));
+            colIndex = 2;
         } else if (column === 'total') {
-            var aText = a.cells[3].textContent.trim();
-            var bText = b.cells[3].textContent.trim();
+            var aText = a.cells[3 + colOffset].textContent.trim();
+            var bText = b.cells[3 + colOffset].textContent.trim();
             aVal = aText === '—' ? 0 : parseFloat(aText.replace('R$ ', '').replace(',', '.'));
             bVal = bText === '—' ? 0 : parseFloat(bText.replace('R$ ', '').replace(',', '.'));
+            colIndex = 3;
         } else if (column === 'status') {
             var statusOrder = {'Recente': 1, 'Ok': 2, 'Antigo': 3, 'Sem preço': 4};
-            aVal = statusOrder[a.cells[4].querySelector('.badge').textContent.trim()] || 99;
-            bVal = statusOrder[b.cells[4].querySelector('.badge').textContent.trim()] || 99;
+            aVal = statusOrder[a.cells[4 + colOffset].querySelector('.badge').textContent.trim()] || 99;
+            bVal = statusOrder[b.cells[4 + colOffset].querySelector('.badge').textContent.trim()] || 99;
+            colIndex = 4;
         }
         
         if (aVal < bVal) return direction === 'asc' ? -1 : 1;
@@ -218,13 +265,15 @@ function sortTable(column) {
         tbody.appendChild(row);
     });
     
-    document.querySelectorAll('th').forEach(function(th) {
+    var tableHeaders = tbody.parentElement.querySelectorAll('th');
+    tableHeaders.forEach(function(th) {
         th.textContent = th.textContent.replace(' ▴', '').replace(' ▾', '') + ' ▾';
     });
     
-    var headers = ['Item ▾', 'Qtd ▾', 'Preço Unit. ▾', 'Total ▾', 'Status ▾'];
-    var index = ['name', 'quantity', 'price', 'total', 'status'].indexOf(column);
-    document.querySelectorAll('th')[index].textContent = headers[index].replace(' ▾', '') + (direction === 'asc' ? ' ▴' : ' ▾');
+    var headers = hasExtraCol ? ['Item ▾', 'Tipo ▾', 'Nível ▾', 'Qtd ▾', 'Preço Unit. ▾', 'Total ▾', 'Status ▾'] : ['Item ▾', 'Qtd ▾', 'Preço Unit. ▾', 'Total ▾', 'Status ▾'];
+    var columns = ['name', 'gear_type', 'gear_level', 'quantity', 'price', 'total', 'status'];
+    var index = columns.indexOf(column);
+    tableHeaders[index].textContent = headers[index].replace(' ▾', '') + (direction === 'asc' ? ' ▴' : ' ▾');
 }
 
 async function toggleItem(id) {

@@ -11,6 +11,8 @@ class TrackedItem(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     appid = Column(Integer, nullable=False, index=True)
     market_hash_name = Column(Text, nullable=False)
+    item_type = Column(Text, nullable=True)
+    is_equipped = Column(Boolean, default=False, nullable=False)
     enabled = Column(Boolean, default=True, nullable=False)
     quantity = Column(Integer, default=1, nullable=False)
     created_at = Column(

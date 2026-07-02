@@ -50,6 +50,8 @@ def import_from_save(save_path: str | Path) -> dict:
             track = TrackedItem(
                 appid=item["appid"],
                 market_hash_name=item["market_hash_name"],
+                item_type=item.get("type"),
+                is_equipped=item.get("is_equipped", False),
                 enabled=True,
                 quantity=item["quantity"],
             )

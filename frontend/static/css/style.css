@@ -392,6 +392,12 @@ table a:hover {
   color: var(--info);
 }
 
+.badge-equipped {
+  background: #2d1f4e;
+  color: #a78bfa;
+  margin-left: 0.5rem;
+}
+
 .badge-neutral {
   background: var(--bg-card);
   color: var(--text-secondary);

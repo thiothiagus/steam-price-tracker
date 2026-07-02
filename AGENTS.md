@@ -35,6 +35,8 @@ Price monitoring platform for Steam Marketplace items (CS2, TBH). Periodic colle
 - Manipulate game memory or processes
 - Use synchronous blocking in async code
 - Make massive parallel requests
+- Use `cd /d` or any directory change in shell commands — use `workdir` parameter instead
+- Assume the working directory is anything other than the project root
 
 ## Architecture
 

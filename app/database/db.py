@@ -30,10 +30,18 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     import sqlite3
     db_path = settings.DATABASE_URL.replace("sqlite:///", "./")
+    con = sqlite3.connect(db_path)
     try:
-        con = sqlite3.connect(db_path)
         con.execute("ALTER TABLE tracked_items ADD COLUMN quantity INTEGER DEFAULT 1 NOT NULL")
-        con.commit()
-        con.close()
     except Exception:
         pass
+    try:
+        con.execute("ALTER TABLE tracked_items ADD COLUMN item_type TEXT")
+    except Exception:
+        pass
+    try:
+        con.execute("ALTER TABLE tracked_items ADD COLUMN is_equipped INTEGER DEFAULT 0 NOT NULL")
+    except Exception:
+        pass
+    con.commit()
+    con.close()

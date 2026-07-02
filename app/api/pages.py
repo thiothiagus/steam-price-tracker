@@ -47,10 +47,18 @@ def _build_items_data(items: list[TrackedItem], db: Session) -> list[dict]:
         grade_color = ""
         icon_url = None
         has_icon = False
+        item_type = item.item_type
+        gear_type = None
+        gear_level = None
         db_item = get_item_by_market_name(item.market_hash_name)
         if db_item:
             grade = db_item.get("grade", "")
             grade_color = get_grade_color(grade)
+            if not item_type:
+                item_type = db_item.get("type")
+            if item_type == "GEAR":
+                gear_type = db_item.get("gearType")
+                gear_level = db_item.get("level")
         icon_url = get_item_icon_url(item.market_hash_name, item.appid)
         has_icon = icon_url is not None
 
@@ -59,6 +67,10 @@ def _build_items_data(items: list[TrackedItem], db: Session) -> list[dict]:
             "appid": item.appid,
             "is_tbh_app": item.appid == TBH_APPID,
             "market_hash_name": item.market_hash_name,
+            "type": item_type,
+            "gear_type": gear_type,
+            "gear_level": gear_level,
+            "is_equipped": item.is_equipped,
             "enabled": item.enabled,
             "quantity": qty,
             "grade": grade,
@@ -121,11 +133,14 @@ def _stats(items: list[TrackedItem], db: Session) -> dict:
 def dashboard(request: Request, db: Session = Depends(get_db)):
     items = db.query(TrackedItem).filter(TrackedItem.appid == TBH_APPID).order_by(TrackedItem.id.desc()).all()
     items_data = _build_items_data(items, db)
+    gears = [i for i in items_data if i.get("type") == "GEAR"]
+    materials = [i for i in items_data if i.get("type") == "MATERIAL"]
     stats = _stats(items, db)
     return templates.TemplateResponse(
         "dashboard.html", {
             "request": request,
-            "items": items_data,
+            "gears": gears,
+            "materials": materials,
             "refresh_hours": REFRESH_HOURS,
             "stats": stats,
             "active_tab": "tbh",
@@ -137,11 +152,14 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
 def dashboard_cs2(request: Request, db: Session = Depends(get_db)):
     items = db.query(TrackedItem).filter(TrackedItem.appid != TBH_APPID).order_by(TrackedItem.id.desc()).all()
     items_data = _build_items_data(items, db)
+    gears = [i for i in items_data if i.get("type") == "GEAR"]
+    materials = [i for i in items_data if i.get("type") == "MATERIAL"]
     stats = _stats(items, db)
     return templates.TemplateResponse(
         "dashboard.html", {
             "request": request,
-            "items": items_data,
+            "gears": gears,
+            "materials": materials,
             "refresh_hours": REFRESH_HOURS,
             "stats": stats,
             "active_tab": "cs2",
