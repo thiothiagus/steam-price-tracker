@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -18,20 +19,36 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+async def _initial_price_collection() -> None:
+    try:
+        from app.services.collector_service import collect_all_prices
+
+        logger.info(
+            "Iniciando coleta inicial dos preços em background "
+            "(apenas itens > 1h sem atualização)..."
+        )
+        await collect_all_prices(force=False)
+        logger.info("Coleta inicial concluída.")
+    except Exception:
+        logger.exception("Falha durante coleta inicial em background.")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
     logger.info("Database initialized.")
-    
+
     start_scheduler()
     import app.state as state
     from app.scheduler.tasks import scheduler
     logger.info("Scheduler status after start: running=%s", scheduler.running)
-    
-    logger.info("Iniciando coleta inicial dos preços (apenas itens > 1h sem atualização)...")
-    from app.services.collector_service import collect_all_prices
-    await collect_all_prices(force=False)
-    logger.info("Coleta inicial concluída.")
+
+    initial_collect_task: asyncio.Task | None = None
+    if settings.RUN_INITIAL_COLLECTION_ON_STARTUP:
+        initial_collect_task = asyncio.create_task(
+            _initial_price_collection(),
+            name="initial-price-collection",
+        )
 
     watcher = SaveWatcher(
         source_path=settings.save_source_path,
@@ -43,12 +60,21 @@ async def lifespan(app: FastAPI):
     watcher.start()
     logger.info("SaveWatcher started.")
 
-    yield
-    logger.info("Shutting down...")
-    watcher.stop()
-    stop_scheduler()
-    from app.collectors.steam import collector
-    await collector.close()
+    try:
+        yield
+    finally:
+        logger.info("Shutting down...")
+        if initial_collect_task is not None and not initial_collect_task.done():
+            initial_collect_task.cancel()
+            try:
+                await initial_collect_task
+            except (asyncio.CancelledError, Exception):
+                pass
+        watcher.stop()
+        stop_scheduler()
+        from app.collectors.steam import collector
+
+        await collector.close()
 
 
 app = FastAPI(title="Steam Market Price Tracker", lifespan=lifespan)

@@ -41,6 +41,7 @@
             <span id="collection-text">Atualizando preços...</span>
         </span>
         <button class="btn btn-primary" onclick="importSave()">Importar Save</button>
+        <button class="btn btn-ghost" onclick="openAddItemModal()">+ Adicionar Item</button>
         
     </div>
 </div>
@@ -136,6 +137,27 @@
 {% endif %}
 
 <div id="import-result" class="card" style="display:none"></div>
+
+<div id="add-item-overlay" class="modal-overlay" style="display:none" onclick="if(event.target===this) closeAddItemModal()">
+    <div class="modal" style="min-width:420px; max-width:560px">
+        <h3>Adicionar Item</h3>
+        <div style="display:flex; flex-direction:column; gap:0.75rem; margin-top:0.75rem">
+            <label style="display:flex; flex-direction:column; gap:0.25rem">
+                <span style="font-size:0.85rem; opacity:0.8">AppID (ex.: 730 = CS2, 3678970 = TBH)</span>
+                <input type="number" id="add-item-appid" placeholder="3678970" style="padding:0.5rem; border:1px solid var(--border); border-radius:4px; background:var(--bg-elev); color:var(--fg)">
+            </label>
+            <label style="display:flex; flex-direction:column; gap:0.25rem">
+                <span style="font-size:0.85rem; opacity:0.8">Market Hash Name (ou busca para TBH)</span>
+                <input type="text" id="add-item-search" placeholder="Buscar por nome..." style="padding:0.5rem; border:1px solid var(--border); border-radius:4px; background:var(--bg-elev); color:var(--fg)">
+            </label>
+            <div id="add-item-results" style="max-height:200px; overflow-y:auto; border:1px solid var(--border); border-radius:4px; display:none"></div>
+        </div>
+        <div class="modal-actions" style="margin-top:1rem">
+            <button class="btn btn-ghost" onclick="closeAddItemModal()">Cancelar</button>
+            <button class="btn btn-primary" id="add-item-submit" onclick="submitAddItem()">Adicionar</button>
+        </div>
+    </div>
+</div>
 
 {% endblock %}
 
@@ -322,16 +344,59 @@ async function previewImport() {
     const div = document.getElementById('import-result');
     div.style.display = 'block';
     div.style.borderColor = 'var(--info)';
-    div.innerHTML = '<div class="card-header"><h2>Preview - Itens do Save</h2><span class="badge badge-info">' + data.total_tradable_items + ' tipos (' + data.total_quantity + ' unidades)</span></div>' +
-        '<div class="table-wrapper"><table><thead><tr><th>ItemKey</th><th>Item</th><th>Grade</th><th>Tipo</th><th>Qtd</th><th>Status</th></tr></thead><tbody>' +
-        data.items.map(function(i) {
-            return '<tr><td>' + i.item_key + '</td><td>' + i.market_hash_name + '</td><td>' + i.grade + '</td><td>' + i.type + '</td><td>' + i.quantity + '</td><td>' +
-                (i.already_tracked
-                    ? '<span class="badge badge-inactive">Já importado</span>'
-                    : '<span class="badge badge-active">Novo</span>') +
-                '</td></tr>';
-        }).join('') + '</tbody></table></div>' +
-        '<div style="margin-top:1rem"><button class="btn btn-primary" onclick="importSave()">Importar Todos</button></div>';
+    while (div.firstChild) div.removeChild(div.firstChild);
+
+    const header = document.createElement('div');
+    header.className = 'card-header';
+    const h2 = document.createElement('h2');
+    h2.textContent = 'Preview - Itens do Save';
+    header.appendChild(h2);
+    const badge = document.createElement('span');
+    badge.className = 'badge badge-info';
+    badge.textContent = data.total_tradable_items + ' tipos (' + data.total_quantity + ' unidades)';
+    header.appendChild(badge);
+    div.appendChild(header);
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'table-wrapper';
+    const table = document.createElement('table');
+    const thead = document.createElement('thead');
+    const headRow = document.createElement('tr');
+    ['ItemKey', 'Item', 'Grade', 'Tipo', 'Qtd', 'Status'].forEach(function(label) {
+        const th = document.createElement('th');
+        th.textContent = label;
+        headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+    const tbody = document.createElement('tbody');
+    data.items.forEach(function(i) {
+        const row = document.createElement('tr');
+        [i.item_key, i.market_hash_name, i.grade, i.type, i.quantity].forEach(function(v) {
+            const td = document.createElement('td');
+            td.textContent = v == null ? '' : String(v);
+            row.appendChild(td);
+        });
+        const tdStatus = document.createElement('td');
+        const statusBadge = document.createElement('span');
+        statusBadge.className = 'badge ' + (i.already_tracked ? 'badge-inactive' : 'badge-active');
+        statusBadge.textContent = i.already_tracked ? 'Já importado' : 'Novo';
+        tdStatus.appendChild(statusBadge);
+        row.appendChild(tdStatus);
+        tbody.appendChild(row);
+    });
+    table.appendChild(tbody);
+    wrapper.appendChild(table);
+    div.appendChild(wrapper);
+
+    const footer = document.createElement('div');
+    footer.style.marginTop = '1rem';
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-primary';
+    btn.textContent = 'Importar Todos';
+    btn.addEventListener('click', importSave);
+    footer.appendChild(btn);
+    div.appendChild(footer);
 }
 
 async function importSave() {
@@ -377,6 +442,117 @@ async function toggleWatcher() {
         showToast('Erro ao controlar watcher', 'error');
     }
 }
+
+// Add Item modal
+let addItemSearchTimer = null;
+
+function openAddItemModal() {
+    const overlay = document.getElementById('add-item-overlay');
+    overlay.style.display = 'flex';
+    document.getElementById('add-item-appid').value = '';
+    document.getElementById('add-item-search').value = '';
+    document.getElementById('add-item-results').style.display = 'none';
+    document.getElementById('add-item-results').innerHTML = '';
+    setTimeout(function() { document.getElementById('add-item-appid').focus(); }, 50);
+}
+
+function closeAddItemModal() {
+    document.getElementById('add-item-overlay').style.display = 'none';
+}
+
+async function runAddItemSearch() {
+    const appidInput = document.getElementById('add-item-appid');
+    const searchInput = document.getElementById('add-item-search');
+    const resultsDiv = document.getElementById('add-item-results');
+    const q = searchInput.value.trim();
+    const appid = appidInput.value.trim();
+    if (!q || q.length < 2) {
+        resultsDiv.style.display = 'none';
+        while (resultsDiv.firstChild) resultsDiv.removeChild(resultsDiv.firstChild);
+        return;
+    }
+    const params = new URLSearchParams({q: q});
+    if (appid) params.set('appid', appid);
+    try {
+        const res = await fetch(BASE + '/items/search?' + params.toString());
+        if (!res.ok) return;
+        const data = await res.json();
+        while (resultsDiv.firstChild) resultsDiv.removeChild(resultsDiv.firstChild);
+        if (!data.items || data.items.length === 0) {
+            const empty = document.createElement('div');
+            empty.style.cssText = 'padding:0.75rem; opacity:0.7';
+            empty.textContent = 'Nenhum resultado.';
+            resultsDiv.appendChild(empty);
+            resultsDiv.style.display = 'block';
+            return;
+        }
+        data.items.forEach(function(item) {
+            const row = document.createElement('div');
+            row.style.cssText = 'padding:0.5rem 0.75rem; cursor:pointer; border-bottom:1px solid var(--border)';
+            const strong = document.createElement('strong');
+            strong.textContent = item.market_hash_name;
+            row.appendChild(strong);
+            const meta = document.createElement('span');
+            meta.style.cssText = 'opacity:0.6; font-size:0.8rem';
+            meta.textContent = ' · ' + (item.grade || '') + ' · ' + (item.type || '');
+            row.appendChild(meta);
+            row.addEventListener('click', function() {
+                searchInput.value = item.market_hash_name;
+                resultsDiv.style.display = 'none';
+                while (resultsDiv.firstChild) resultsDiv.removeChild(resultsDiv.firstChild);
+            });
+            row.addEventListener('mouseenter', function() { row.style.background = 'var(--bg-elev)'; });
+            row.addEventListener('mouseleave', function() { row.style.background = ''; });
+            resultsDiv.appendChild(row);
+        });
+        resultsDiv.style.display = 'block';
+    } catch(e) {
+        console.error('Search failed', e);
+    }
+}
+
+async function submitAddItem() {
+    const appid = parseInt(document.getElementById('add-item-appid').value);
+    const name = document.getElementById('add-item-search').value.trim();
+    if (!appid || !name) {
+        showToast('Preencha AppID e nome do item.', 'error');
+        return;
+    }
+    const btn = document.getElementById('add-item-submit');
+    setLoading(btn, true);
+    try {
+        const res = await fetch(BASE + '/items', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({appid: appid, market_hash_name: name, enabled: true})
+        });
+        if (res.status === 201) {
+            const data = await res.json();
+            showToast('Item adicionado (id=' + data.id + ')', 'success');
+            closeAddItemModal();
+            setTimeout(function() { location.reload(); }, 800);
+        } else if (res.status === 409) {
+            showToast('Item já está sendo monitorado.', 'error');
+        } else {
+            const detail = await res.json().catch(function() { return {}; });
+            showToast('Erro: ' + (detail.detail || res.status), 'error');
+        }
+    } catch(e) {
+        showToast('Falha de rede.', 'error');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('add-item-search');
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            clearTimeout(addItemSearchTimer);
+            addItemSearchTimer = setTimeout(runAddItemSearch, 250);
+        });
+    }
+});
 
 // Init
 updateWatcherStatus();

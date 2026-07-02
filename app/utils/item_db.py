@@ -73,29 +73,6 @@ def _title_case_grade(grade: str) -> str:
     return grade.title()
 
 
-def build_market_name(item: dict[str, Any]) -> str | None:
-    if not item.get("tradable"):
-        return None
-
-    name = item["name"]
-    grade = _title_case_grade(item.get("grade", ""))
-    variant = item.get("variant", "")
-    item_type = item["type"]
-
-    if item_type == "MATERIAL":
-        return name
-
-    if item_type in ("GEAR",):
-        if variant:
-            return f"{name} ({grade}) {variant}"
-        return f"{name} ({grade})"
-
-    if item_type == "STAGEBOX":
-        return name
-
-    return name
-
-
 def is_item_tradable(item_key: int) -> bool:
     item = get_item(item_key)
     if not item:
@@ -149,6 +126,32 @@ def _build_market_name_index() -> dict[str, dict[str, Any]]:
 def get_item_by_market_name(market_hash_name: str) -> dict[str, Any] | None:
     idx = _build_market_name_index()
     return idx.get(market_hash_name)
+
+
+def search_tradable_market_names(
+    query: str, limit: int = 25
+) -> list[dict[str, str]]:
+    """Busca parcial (case-insensitive) no mercado TBH.
+
+    Retorna até ``limit`` itens com ``market_hash_name``, ``grade`` e ``type``.
+    """
+    q = query.strip().lower()
+    if not q:
+        return []
+    idx = _build_market_name_index()
+    results: list[dict[str, str]] = []
+    for name, item in idx.items():
+        if q in name.lower():
+            results.append(
+                {
+                    "market_hash_name": name,
+                    "grade": item.get("grade", ""),
+                    "type": item.get("type", ""),
+                }
+            )
+            if len(results) >= limit:
+                break
+    return results
 
 
 GRADE_COLORS: dict[str, str] = {

@@ -61,21 +61,32 @@ python main.py
 POST /api/items
 {
     "appid": 730,
-    "market_hash_name": "AK-47 | Redline (Field-Tested)"
+    "market_hash_name": "AK-47 | Redline (Field-Tested)",
+    "enabled": true
 }
+```
+
+Outra forma é importar automaticamente a partir do save do TBH:
+
+```bash
+# Preview antes de importar
+GET /api/import-preview
+
+# Importar todos os itens negociáveis do save
+POST /api/import-save
 ```
 
 ### Consultar Preços
 
 ```bash
-# Preço atual
-GET /api/items/{item_id}/price
-
 # Histórico
-GET /api/items/{item_id}/history
+GET /api/items/{item_id}/history?limit=100
 
-# Gráfico
-GET /api/items/{item_id}/chart
+# Forçar coleta de um item
+POST /api/items/{item_id}/collect
+
+# Forçar coleta de todos (respeitando rate limit)
+POST /api/collect
 ```
 
 ## Estrutura do Projeto
@@ -118,10 +129,16 @@ Para adicionar novos ícones manualmente, basta colocá-los em `app/data/icons/`
 
 | Variável | Descrição | Padrão |
 |----------|-----------|--------|
-| DATABASE_URL | URL do banco de dados | sqlite:///steam_tracker.db |
-| API_HOST | Host da API | 0.0.0.0 |
-| API_PORT | Porta da API | 8000 |
-| COLLECTION_INTERVAL | Intervalo de coleta (min) | 5 |
+| DATABASE_URL | URL do banco de dados | sqlite:///./app/data/steam_tracker.db |
+| STEAM_CURRENCY | Moeda da Steam (7=BRL) | 7 |
+| COLLECTOR_DELAY_SECONDS | Delay entre requisições à Steam | 5.0 |
+| COLLECTOR_REFRESH_HOURS | Janela de staleness do preço | 1 |
+| COLLECTOR_MAX_RETRIES | Tentativas por item | 3 |
+| COLLECTOR_BACKOFF_FACTOR | Fator de backoff exponencial | 3.0 |
+| RUN_INITIAL_COLLECTION_ON_STARTUP | Disparar coleta inicial no lifespan | true |
+| SAVE_SOURCE_PATH | Caminho do save original (vazio = auto-detect AppData) | (vazio) |
+| SAVE_DEST_PATH | Caminho de destino para cópia do save | (project root) |
+| LOG_LEVEL | Nível de log (DEBUG/INFO/WARNING/ERROR) | INFO |
 
 ## Frequência de Coleta
 
@@ -134,24 +151,39 @@ Para adicionar novos ícones manualmente, basta colocá-los em `app/data/icons/`
 
 ## API Endpoints
 
+Todas as rotas REST são prefixadas com `/api`.
+
 ### Itens
 
-- `GET /api/items` - Listar itens monitorados
-- `POST /api/items` - Adicionar novo item
-- `GET /api/items/{id}` - Detalhes do item
-- `PUT /api/items/{id}` - Atualizar item
-- `DELETE /api/items/{id}` - Remover item
+- `GET /api/items` — listar itens monitorados (não arquivados)
+- `GET /api/items/archived` — listar itens arquivados/soft-deleted
+- `POST /api/items` — adicionar novo item
+- `PATCH /api/items/{id}/toggle` — habilitar/desabilitar item
+- `DELETE /api/items/{id}` — remover item e todo seu histórico
+- `POST /api/items/{id}/restore` — restaurar item arquivado
 
 ### Preços
 
-- `GET /api/items/{id}/price` - Preço atual
-- `GET /api/items/{id}/history` - Histórico de preços
-- `GET /api/items/{id}/chart` - Dados para gráfico
+- `GET /api/items/{id}/history?limit=N` — histórico de preços
+- `GET /api/items/{id}/analytics` — analytics (variação 24h/7d, média móvel, sparkline)
+- `POST /api/items/{id}/collect` — forçar coleta de um item
+- `POST /api/collect` — forçar coleta completa (respeitando rate limit)
+- `GET /api/collect/cooldown` — tempo restante de cooldown da Steam
+- `GET /api/collection/status` — progresso de coleta em andamento
 
-### Saúde
+### Save / Importação
 
-- `GET /health` - Status da API
-- `GET /ready` - Pronto para receber requests
+- `GET /api/import-preview` — pré-visualizar itens do save
+- `POST /api/import-save` — importar do save do TBH
+- `GET /api/watcher/status` — status do SaveWatcher
+- `POST /api/watcher/start` — iniciar SaveWatcher
+- `POST /api/watcher/stop` — parar SaveWatcher
+
+### Páginas
+
+- `GET /` — dashboard TBH
+- `GET /cs2` — dashboard CS2
+- `GET /items/{id}` — detalhe do item (com gráfico)
 
 ## Limitações
 

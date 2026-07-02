@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     COLLECTOR_MAX_RETRIES: int = 3
     COLLECTOR_BACKOFF_FACTOR: float = 3.0
     COLLECTOR_BASE_INTERVAL_MINUTES: int = 5
+    RUN_INITIAL_COLLECTION_ON_STARTUP: bool = True
     LOG_LEVEL: str = "INFO"
     BASE_DIR: Path = Path(__file__).resolve().parent.parent
 

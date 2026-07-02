@@ -57,6 +57,30 @@
 </div>
 {% endif %}
 
+{% if analytics.sample_count and analytics.sample_count > 1 %}
+<div class="price-summary">
+    <div class="stat-card">
+        <span class="stat-label">Variação 24h</span>
+        <span class="stat-value" style="color: {{ 'var(--success)' if analytics.change_24h_pct and analytics.change_24h_pct >= 0 else 'var(--danger)' if analytics.change_24h_pct and analytics.change_24h_pct < 0 else 'inherit' }}">
+            {{ ('+' ~ ('%.2f'|format(analytics.change_24h_pct)) ~ '%') if analytics.change_24h_pct is not none else '—' }}
+        </span>
+        <span class="stat-sub">mín {{ "R$ %.2f"|format(analytics.min_24h) if analytics.min_24h else '—' }} · máx {{ "R$ %.2f"|format(analytics.max_24h) if analytics.max_24h else '—' }}</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-label">Variação 7d</span>
+        <span class="stat-value" style="color: {{ 'var(--success)' if analytics.change_7d_pct and analytics.change_7d_pct >= 0 else 'var(--danger)' if analytics.change_7d_pct and analytics.change_7d_pct < 0 else 'inherit' }}">
+            {{ ('+' ~ ('%.2f'|format(analytics.change_7d_pct)) ~ '%') if analytics.change_7d_pct is not none else '—' }}
+        </span>
+        <span class="stat-sub">Volume 24h: {{ analytics.vol_24h if analytics.vol_24h else '—' }}</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-label">Média Móvel 7d</span>
+        <span class="stat-value">{{ "R$ %.2f"|format(analytics.moving_avg_7d) if analytics.moving_avg_7d else '—' }}</span>
+        <span class="stat-sub">vs último: {% if analytics.latest_price and analytics.moving_avg_7d %}{{ '%.1f'|format((analytics.latest_price / analytics.moving_avg_7d - 1) * 100) }}%{% else %}—{% endif %}</span>
+    </div>
+</div>
+{% endif %}
+
 <div class="card">
     <div class="card-header">
         <h2>Gráfico de Preço</h2>

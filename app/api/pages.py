@@ -3,7 +3,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.config import settings
 from app.database.db import get_db
@@ -29,7 +29,7 @@ def calculate_revenue(price: float) -> float:
 
 
 def _build_items_data(items: list[TrackedItem], db: Session) -> list[dict]:
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     cutoff = now - STALE_CUTOFF
     data = []
     for item in items:
@@ -39,8 +39,12 @@ def _build_items_data(items: list[TrackedItem], db: Session) -> list[dict]:
             .order_by(PriceHistory.collected_at.desc())
             .first()
         )
-        collected_at = latest.collected_at if latest else None
-        if not collected_at:
+        raw_collected_at = latest.collected_at if latest else None
+        if raw_collected_at is not None and raw_collected_at.tzinfo is None:
+            collected_at = raw_collected_at.replace(tzinfo=timezone.utc)
+        else:
+            collected_at = raw_collected_at
+        if collected_at is None:
             freshness = "pending"
         elif collected_at < cutoff:
             freshness = "stale"
@@ -230,6 +234,13 @@ def item_detail(request: Request, item_id: int, db: Session = Depends(get_db)):
     db_item = get_item_by_market_name(item.market_hash_name) if is_tbh_app else None
     grade = db_item.get("grade", "") if db_item else ""
     grade_color = get_grade_color(grade) if grade else ""
+
+    analytics: dict = {"sample_count": 0}
+    if records:
+        from app.services.analytics_service import compute_item_analytics
+
+        analytics = compute_item_analytics(db, item)
+
     return templates.TemplateResponse(
         "item_detail.html",
         {
@@ -240,6 +251,7 @@ def item_detail(request: Request, item_id: int, db: Session = Depends(get_db)):
             "chart_labels": chart_labels,
             "chart_prices": chart_prices,
             "chart_medians": chart_medians,
+            "analytics": analytics,
             "active_tab": active_tab,
             "icon_url": icon_url,
             "grade": grade,

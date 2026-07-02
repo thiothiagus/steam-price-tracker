@@ -16,6 +16,7 @@ from app.schemas import (
     PriceCollectResponse,
 )
 from app.collectors.steam import collector
+from app.config import settings
 from app.services.collector_service import collect_single_item
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,21 @@ def list_items(db: Session = Depends(get_db)):
         .all()
     )
     return items
+
+
+@router.get("/items/search")
+def search_items(q: str, appid: int | None = None, limit: int = 25):
+    """Busca parcial de market_hash_name no catálogo TBH.
+
+    Apenas itens que existem no ``items.json`` do TBH. Para outros jogos
+    (ex.: CS2) o usuário deve digitar o nome exato e usar POST /api/items.
+    """
+    from app.utils.item_db import search_tradable_market_names
+
+    if appid is not None and appid != settings.TBH_APPID:
+        return {"items": [], "message": "Busca por nome só disponível para TBH."}
+    items = search_tradable_market_names(q, limit=limit)
+    return {"items": items, "count": len(items)}
 
 
 @router.get("/items/archived", response_model=List[TrackedItemResponse])
@@ -116,6 +132,16 @@ def get_price_history(item_id: int, limit: int = 100, db: Session = Depends(get_
         .all()
     )
     return records
+
+
+@router.get("/items/{item_id}/analytics")
+def get_item_analytics(item_id: int, db: Session = Depends(get_db)):
+    from app.services.analytics_service import compute_item_analytics
+
+    item = db.query(TrackedItem).filter(TrackedItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found.")
+    return compute_item_analytics(db, item)
 
 
 @router.post("/items/{item_id}/collect", response_model=PriceCollectResponse)
