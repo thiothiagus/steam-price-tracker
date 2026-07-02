@@ -62,6 +62,13 @@ AGENTS.md (this file) ← Entry point
 | `app/collectors/steam.py` | Steam API collector |
 | `app/scheduler/tasks.py` | Collection jobs |
 
+## Domain Knowledge
+
+- **Steam Market Fees**: See `.ai-context/domain/steam-market-fees.md`
+  - Seller receives 87% (13% fee) for sales >= R$ 1.00
+  - Fixed R$ 0.10 fee for sales < R$ 1.00
+  - Minimum sale price: R$ 0.15
+
 ## Decision Process
 
 For architectural decisions:

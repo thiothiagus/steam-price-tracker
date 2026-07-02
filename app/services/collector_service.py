@@ -15,7 +15,11 @@ REFRESH_HOURS = settings.COLLECTOR_REFRESH_HOURS
 
 
 def _get_items_to_collect(db: Session, force: bool = False) -> list[TrackedItem]:
-    items = db.query(TrackedItem).filter(TrackedItem.enabled.is_(True)).all()
+    items = (
+        db.query(TrackedItem)
+        .filter(TrackedItem.enabled.is_(True), TrackedItem.removed_at.is_(None))
+        .all()
+    )
     if force:
         return items
 
@@ -114,7 +118,11 @@ async def collect_all_prices(force: bool = False) -> dict:
 async def collect_single_item(item_id: int) -> dict | None:
     db: Session = SessionLocal()
     try:
-        item = db.query(TrackedItem).filter(TrackedItem.id == item_id).first()
+        item = (
+            db.query(TrackedItem)
+            .filter(TrackedItem.id == item_id, TrackedItem.removed_at.is_(None))
+            .first()
+        )
         if not item:
             return None
 

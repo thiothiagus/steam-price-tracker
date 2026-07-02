@@ -1,3 +1,4 @@
+from datetime import datetime
 from pydantic import BaseModel
 
 
@@ -12,6 +13,7 @@ class TrackedItemResponse(BaseModel):
     appid: int
     market_hash_name: str
     enabled: bool
+    removed_at: datetime | None = None
 
     class Config:
         from_attributes = True

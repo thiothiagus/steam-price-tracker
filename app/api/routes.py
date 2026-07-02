@@ -25,8 +25,35 @@ router = APIRouter(prefix="/api", tags=["api"])
 
 @router.get("/items", response_model=List[TrackedItemResponse])
 def list_items(db: Session = Depends(get_db)):
-    items = db.query(TrackedItem).order_by(TrackedItem.id.desc()).all()
+    items = (
+        db.query(TrackedItem)
+        .filter(TrackedItem.removed_at.is_(None))
+        .order_by(TrackedItem.id.desc())
+        .all()
+    )
     return items
+
+
+@router.get("/items/archived", response_model=List[TrackedItemResponse])
+def list_archived_items(db: Session = Depends(get_db)):
+    items = (
+        db.query(TrackedItem)
+        .filter(TrackedItem.removed_at.isnot(None))
+        .order_by(TrackedItem.removed_at.desc())
+        .all()
+    )
+    return items
+
+
+@router.post("/items/{item_id}/restore", response_model=TrackedItemResponse)
+def restore_item(item_id: int, db: Session = Depends(get_db)):
+    item = db.query(TrackedItem).filter(TrackedItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found.")
+    item.removed_at = None
+    db.commit()
+    db.refresh(item)
+    return item
 
 
 @router.post("/items", response_model=TrackedItemResponse, status_code=201)

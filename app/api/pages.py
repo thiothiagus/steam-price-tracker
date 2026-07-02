@@ -17,6 +17,16 @@ REFRESH_HOURS = settings.COLLECTOR_REFRESH_HOURS
 STALE_CUTOFF = timedelta(hours=REFRESH_HOURS)
 TBH_APPID = settings.TBH_APPID
 
+MIN_PRICE_THRESHOLD = 1.0
+FIXED_FEE = 0.10
+FEE_MULTIPLIER = 0.87
+
+
+def calculate_revenue(price: float) -> float:
+    if price < MIN_PRICE_THRESHOLD:
+        return max(0, price - FIXED_FEE)
+    return price * FEE_MULTIPLIER
+
 
 def _build_items_data(items: list[TrackedItem], db: Session) -> list[dict]:
     now = datetime.utcnow()
@@ -89,13 +99,14 @@ def _build_items_data(items: list[TrackedItem], db: Session) -> list[dict]:
 def _stats(items: list[TrackedItem], db: Session) -> dict:
     total_items = len(items)
     active_items = sum(1 for i in items if i.enabled)
-    
+
     total_inventory_value = 0.0
+    total_inventory_value_after_fees = 0.0
     items_with_price = 0
     total_quantity = 0
     highest_value_item = None
     highest_value = 0.0
-    
+
     for item in items:
         latest = (
             db.query(PriceHistory)
@@ -105,12 +116,13 @@ def _stats(items: list[TrackedItem], db: Session) -> dict:
         )
         qty = item.quantity if item.quantity else 1
         total_quantity += qty
-        
+
         if latest and latest.price:
             item_total = latest.price * qty
             total_inventory_value += item_total
+            total_inventory_value_after_fees += calculate_revenue(latest.price) * qty
             items_with_price += 1
-            
+
             if item_total > highest_value:
                 highest_value = item_total
                 highest_value_item = item.market_hash_name
@@ -121,6 +133,7 @@ def _stats(items: list[TrackedItem], db: Session) -> dict:
         "total_items": total_items,
         "active_items": active_items,
         "total_inventory_value": total_inventory_value,
+        "total_inventory_value_after_fees": total_inventory_value_after_fees,
         "items_with_price": items_with_price,
         "total_quantity": total_quantity,
         "avg_item_price": avg_item_price,
@@ -131,7 +144,12 @@ def _stats(items: list[TrackedItem], db: Session) -> dict:
 
 @router.get("/")
 def dashboard(request: Request, db: Session = Depends(get_db)):
-    items = db.query(TrackedItem).filter(TrackedItem.appid == TBH_APPID).order_by(TrackedItem.id.desc()).all()
+    items = (
+        db.query(TrackedItem)
+        .filter(TrackedItem.appid == TBH_APPID, TrackedItem.removed_at.is_(None))
+        .order_by(TrackedItem.id.desc())
+        .all()
+    )
     items_data = _build_items_data(items, db)
     gears = [i for i in items_data if i.get("type") == "GEAR"]
     materials = [i for i in items_data if i.get("type") == "MATERIAL"]
@@ -150,7 +168,12 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/cs2")
 def dashboard_cs2(request: Request, db: Session = Depends(get_db)):
-    items = db.query(TrackedItem).filter(TrackedItem.appid != TBH_APPID).order_by(TrackedItem.id.desc()).all()
+    items = (
+        db.query(TrackedItem)
+        .filter(TrackedItem.appid != TBH_APPID, TrackedItem.removed_at.is_(None))
+        .order_by(TrackedItem.id.desc())
+        .all()
+    )
     items_data = _build_items_data(items, db)
     gears = [i for i in items_data if i.get("type") == "GEAR"]
     materials = [i for i in items_data if i.get("type") == "MATERIAL"]

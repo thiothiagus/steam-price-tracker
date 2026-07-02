@@ -43,5 +43,9 @@ def init_db() -> None:
         con.execute("ALTER TABLE tracked_items ADD COLUMN is_equipped INTEGER DEFAULT 0 NOT NULL")
     except Exception:
         pass
+    try:
+        con.execute("ALTER TABLE tracked_items ADD COLUMN removed_at TIMESTAMP")
+    except Exception:
+        pass
     con.commit()
     con.close()

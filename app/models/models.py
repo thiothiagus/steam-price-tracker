@@ -18,6 +18,7 @@ class TrackedItem(Base):
     created_at = Column(
         DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
+    removed_at = Column(DateTime, nullable=True)
 
     price_records = relationship(
         "PriceHistory", back_populates="tracked_item", cascade="all, delete-orphan"

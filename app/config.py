@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     SAVE_SOURCE_PATH: str = ""
     SAVE_DEST_PATH: str = ""
     SAVE_WATCHER_COOLDOWN_SECONDS: float = 5.0
-    SAVE_WATCHER_POLL_INTERVAL: float = 10.0
+    SAVE_WATCHER_POLL_INTERVAL: float = 60.0
 
     TBH_APPID: int = 3678970
 

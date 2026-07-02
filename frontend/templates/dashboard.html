@@ -5,7 +5,10 @@
 <div class="stats-grid">
     <div class="stat-card accent">
         <span class="stat-label">Valor Total do Inventário</span>
-        <span class="stat-value">{{ "R$ %.2f"|format(stats.total_inventory_value) if stats.total_inventory_value > 0 else "—" }}</span>
+        <span class="stat-value">
+            {{ "R$ %.2f"|format(stats.total_inventory_value) if stats.total_inventory_value > 0 else "—" }}
+            <span style="font-size:0.7em; opacity:0.7" title="Valor total já com taxas da Steam deduzidas (13% para vendas ≥R$1,00 ou R$0,10 fixo para vendas <R$1,00)">({{ "R$ %.2f"|format(stats.total_inventory_value_after_fees) if stats.total_inventory_value_after_fees > 0 else "0.00" }})</span>
+        </span>
         <span class="stat-sub">{{ stats.items_with_price }}/{{ stats.total_items }} itens com preço</span>
     </div>
     <div class="stat-card success">
