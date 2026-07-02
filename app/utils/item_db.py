@@ -150,16 +150,16 @@ def get_item_by_market_name(market_hash_name: str) -> dict[str, Any] | None:
 
 
 GRADE_COLORS: dict[str, str] = {
-    "COMMON": "#9d9d9d",
-    "UNCOMMON": "#1eff00",
-    "RARE": "#0070dd",
-    "LEGENDARY": "#a335ee",
-    "IMMORTAL": "#ff8000",
-    "ARCANA": "#e6cc80",
-    "BEYOND": "#00ffcc",
-    "CELESTIAL": "#00aaff",
-    "DIVINE": "#ff4080",
-    "COSMIC": "#ff00aa",
+    "COMMON": "#e4e4e4",
+    "UNCOMMON": "#54fc0c",
+    "RARE": "#2f8bfc",
+    "LEGENDARY": "#fc9c0c",
+    "IMMORTAL": "#fc2424",
+    "ARCANA": "#b40cfc",
+    "BEYOND": "#fc246c",
+    "CELESTIAL": "#6ccce4",
+    "DIVINE": "#fce454",
+    "COSMIC": "#fcfcfc",
 }
 
 

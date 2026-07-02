@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "sqlite:///./steam_tracker.db"
+    DATABASE_URL: str = "sqlite:///./app/data/steam_tracker.db"
     STEAM_CURRENCY: int = 7
     COLLECTOR_DELAY_SECONDS: float = 5.0
     COLLECTOR_REFRESH_HOURS: int = 1
