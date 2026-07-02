@@ -72,6 +72,8 @@
                     <img src="{{ item.icon_url }}" alt="" class="item-icon" loading="lazy">
                     {% elif item.grade_color %}
                     <span class="rarity-dot" style="background:{{ item.grade_color }}"></span>
+                    {% else %}
+                    <span class="rarity-dot" style="background:{{ '#888' if item.is_tbh_app else '#f60' }}"></span>
                     {% endif %}
                     <a href="/items/{{ item.id }}" class="item-name" {% if item.grade_color %}style="color:{{ item.grade_color }}"{% endif %}>{{ item.market_hash_name }}</a>
                 </td>

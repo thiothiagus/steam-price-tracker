@@ -46,22 +46,25 @@ def _build_items_data(items: list[TrackedItem], db: Session) -> list[dict]:
         grade = ""
         grade_color = ""
         icon_url = None
-        if item.appid == TBH_APPID:
-            db_item = get_item_by_market_name(item.market_hash_name)
-            if db_item:
-                grade = db_item.get("grade", "")
-                grade_color = get_grade_color(grade)
-            icon_url = get_item_icon_url(item.market_hash_name)
+        has_icon = False
+        db_item = get_item_by_market_name(item.market_hash_name)
+        if db_item:
+            grade = db_item.get("grade", "")
+            grade_color = get_grade_color(grade)
+        icon_url = get_item_icon_url(item.market_hash_name, item.appid)
+        has_icon = icon_url is not None
 
         data.append({
             "id": item.id,
             "appid": item.appid,
+            "is_tbh_app": item.appid == TBH_APPID,
             "market_hash_name": item.market_hash_name,
             "enabled": item.enabled,
             "quantity": qty,
             "grade": grade,
             "grade_color": grade_color,
             "icon_url": icon_url,
+            "has_icon": has_icon,
             "latest_price": unit_price,
             "total_price": total_price,
             "latest_volume": latest.volume if latest else None,
@@ -181,8 +184,9 @@ def item_detail(request: Request, item_id: int, db: Session = Depends(get_db)):
     chart_medians = [r.median_price for r in records]
 
     active_tab = "tbh" if item.appid == TBH_APPID else "cs2"
-    icon_url = get_item_icon_url(item.market_hash_name) if item.appid == TBH_APPID else None
-    db_item = get_item_by_market_name(item.market_hash_name) if item.appid == TBH_APPID else None
+    icon_url = get_item_icon_url(item.market_hash_name, item.appid)
+    is_tbh_app = item.appid == TBH_APPID
+    db_item = get_item_by_market_name(item.market_hash_name) if is_tbh_app else None
     grade = db_item.get("grade", "") if db_item else ""
     grade_color = get_grade_color(grade) if grade else ""
     return templates.TemplateResponse(
@@ -199,5 +203,6 @@ def item_detail(request: Request, item_id: int, db: Session = Depends(get_db)):
             "icon_url": icon_url,
             "grade": grade,
             "grade_color": grade_color,
+            "is_tbh_app": is_tbh_app,
         },
     )

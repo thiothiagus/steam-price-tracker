@@ -24,22 +24,24 @@ def _load_icon_hashes() -> dict[str, str | None]:
     return _ICON_HASHES
 
 
-def get_item_icon_url(market_hash_name: str) -> str | None:
-    """Retorna URL do ícone do item (local ou Steam)."""
-    # Tenta encontrar o ícone local primeiro
+def get_item_icon_url(market_hash_name: str, appid: int | None = None) -> str | None:
+    """Retorna URL do ícone do item (local, hash ou Steam). Salva localmente se baixar."""
     safe_name = market_hash_name.replace("/", "_")
     local_icon_path = _ICONS_DIR / f"{safe_name}.png"
-    
+
     if local_icon_path.exists():
-        # Retorna URL estática para o ícone local
         return f"/static/icons/{safe_name}.png"
-    
-    # Fallback para hash da Steam
+
     hashes = _load_icon_hashes()
     icon_hash = hashes.get(market_hash_name)
-    if not icon_hash:
-        return None
-    return _STEAM_ICON_BASE + icon_hash
+    if icon_hash:
+        return _STEAM_ICON_BASE + icon_hash
+
+    if appid is not None:
+        from app.utils.steam_api import fetch_and_save_icon
+        return fetch_and_save_icon(appid, market_hash_name)
+
+    return None
 
 
 _ITEMS_DB: dict[int, dict[str, Any]] | None = None

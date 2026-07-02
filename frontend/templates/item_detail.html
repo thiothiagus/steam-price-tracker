@@ -8,6 +8,10 @@
     <div style="display:flex;align-items:center;gap:0.75rem">
         {% if icon_url %}
         <img src="{{ icon_url }}" alt="" class="item-icon-lg" loading="lazy">
+        {% elif grade_color %}
+        <span class="rarity-dot-lg" style="background:{{ grade_color }}"></span>
+        {% else %}
+        <span class="rarity-dot-lg" style="background:{{ '#888' if is_tbh_app else '#f60' }}"></span>
         {% endif %}
         <div>
             <h1 {% if grade_color %}style="color:{{ grade_color }}"{% endif %}>{{ item.market_hash_name }}</h1>

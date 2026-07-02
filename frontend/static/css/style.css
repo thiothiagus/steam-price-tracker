@@ -735,14 +735,37 @@ table a:hover {
 
 /* Rarity dot indicator */
 .rarity-dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
-  margin-right: 6px;
+  margin-right: 8px;
   vertical-align: middle;
-  box-shadow: 0 0 4px currentColor;
+  box-shadow: 0 0 6px currentColor;
   flex-shrink: 0;
+  font-size: 10px;
+  font-weight: bold;
+  color: #000;
+  background: var(--dot-color, #888);
+}
+
+.rarity-dot-lg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  margin-right: 12px;
+  vertical-align: middle;
+  box-shadow: 0 0 8px currentColor;
+  flex-shrink: 0;
+  font-size: 20px;
+  font-weight: bold;
+  color: #000;
+  background: var(--dot-color, #888);
 }
 
 /* Item icon in table */

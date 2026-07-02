@@ -10,9 +10,10 @@ Plataforma de monitoramento de preços que coleta dados periodicamente, armazena
 
 - Monitoramento automático de preços de itens da Steam
 - Histórico completo de preços com gráficos
-- Dashboard para visualização de dados
+- Dashboard para visualização de dados com ícones dos itens
 - Coleta periódica com controle de rate limit
 - Suporte a múltiplos itens e jogos
+- Ícones automaticamente baixados da Steam Community Market
 - Testes automatizados com pytest
 
 ## Stack Tecnológica
@@ -88,14 +89,28 @@ steam-price-tracker/
 │   ├── database/     # Configuração do banco
 │   ├── scheduler/    # Jobs agendados
 │   ├── collectors/   # Coleta de dados da Steam
-│   └── utils/        # Utilitários
+│   ├── data/
+│   │   ├── icons/    # Ícones baixados localmente
+│   │   ├── items.json
+│   │   └── icon_hashes.json
+│   └── utils/        # Utilitários (item_db, steam_api, save_parser)
 ├── frontend/         # Templates e estáticos
+│   └── static/icons/ # Ícones servidos ao frontend
 ├── tests/            # Testes automatizados
 ├── docs/             # Documentação
 ├── requirements.txt
 ├── main.py
 └── README.md
 ```
+
+### Sistema de Ícones
+
+Os ícones dos itens são gerenciados automaticamente:
+- **Local**: `app/data/icons/` -下载ados da Steam e armazenados localmente
+- **Frontend**: `frontend/static/icons/` - cópias para servir via URL `/static/icons/`
+- **Fallback**: Quando Steam bloqueia, mostra bolinha colorida pela raridade
+
+Para adicionar novos ícones manualmente, basta colocá-los em `app/data/icons/` com o nome correto (ex: `Dimensional Sword (Immortal) A.png`).
 
 ## Configuração
 
