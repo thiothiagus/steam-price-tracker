@@ -2,8 +2,10 @@
 Test fixtures for Steam Price Tracker tests.
 """
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
+from datetime import datetime, timezone
 
 from app.database.db import Base, get_db
 from app.models.models import TrackedItem, PriceHistory
@@ -15,21 +17,32 @@ def test_db_engine():
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
     )
     Base.metadata.create_all(bind=engine)
+    # Debug: verify columns exist
+    inspector = inspect(engine)
+    cols = [c['name'] for c in inspector.get_columns('tracked_items')]
+    print(f"DEBUG: tracked_items columns: {cols}")
     yield engine
     Base.metadata.drop_all(bind=engine)
 
 
 @pytest.fixture
-def test_db_session(test_db_engine):
-    """Create a test database session."""
+def test_db_session_factory(test_db_engine):
+    """Create a test database session factory."""
     TestingSessionLocal = sessionmaker(
         autocommit=False,
         autoflush=False,
         bind=test_db_engine,
     )
-    session = TestingSessionLocal()
+    return TestingSessionLocal
+
+
+@pytest.fixture
+def test_db_session(test_db_session_factory):
+    """Create a test database session."""
+    session = test_db_session_factory()
     try:
         yield session
     finally:
@@ -54,8 +67,6 @@ def sample_tracked_item(test_db_session: Session):
 @pytest.fixture
 def sample_price_history(test_db_session: Session, sample_tracked_item: TrackedItem):
     """Create sample price history records for testing."""
-    from datetime import datetime, timezone
-    
     records = [
         PriceHistory(
             tracked_item_id=sample_tracked_item.id,
@@ -79,12 +90,18 @@ def sample_price_history(test_db_session: Session, sample_tracked_item: TrackedI
 
 
 @pytest.fixture
-def db_override(test_db_session: Session):
+def db_override(test_db_session_factory):
     """Override get_db dependency for FastAPI tests."""
     def _get_db():
+        session = test_db_session_factory()
         try:
-            yield test_db_session
+            yield session
         finally:
-            pass
-    
+            session.close()
     return _get_db
+
+
+@pytest.fixture
+def collector_session_factory(test_db_session_factory):
+    """Session factory for collector service tests."""
+    return test_db_session_factory

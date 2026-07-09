@@ -140,6 +140,8 @@ class SaveParser:
                 "name": db_item["name"],
                 "grade": db_item.get("grade", ""),
                 "type": db_item["type"],
+                "gear_type": db_item.get("gearType"),
+                "gear_level": db_item.get("level"),
                 "appid": STEAM_APPID_TBH,
                 "quantity": quantity,
                 "is_equipped": uid in equipped_uids,

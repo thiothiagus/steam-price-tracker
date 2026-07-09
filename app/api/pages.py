@@ -62,17 +62,12 @@ def _build_items_data(items: list[TrackedItem], db: Session) -> list[dict]:
         icon_url = None
         has_icon = False
         item_type = item.item_type
-        gear_type = None
-        gear_level = None
         db_item = get_item_by_market_name(item.market_hash_name)
         if db_item:
             grade = db_item.get("grade", "")
             grade_color = get_grade_color(grade)
             if not item_type:
                 item_type = db_item.get("type")
-            if item_type == "GEAR":
-                gear_type = db_item.get("gearType")
-                gear_level = db_item.get("level")
         icon_url = get_item_icon_url(item.market_hash_name, item.appid)
         has_icon = icon_url is not None
 
@@ -82,8 +77,8 @@ def _build_items_data(items: list[TrackedItem], db: Session) -> list[dict]:
             "is_tbh_app": item.appid == TBH_APPID,
             "market_hash_name": item.market_hash_name,
             "type": item_type,
-            "gear_type": gear_type,
-            "gear_level": gear_level,
+            "gear_type": item.gear_type,
+            "gear_level": item.gear_level,
             "is_equipped": item.is_equipped,
             "enabled": item.enabled,
             "quantity": qty,
