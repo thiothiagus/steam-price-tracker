@@ -20,10 +20,6 @@ def test_db_engine():
         poolclass=StaticPool,
     )
     Base.metadata.create_all(bind=engine)
-    # Debug: verify columns exist
-    inspector = inspect(engine)
-    cols = [c['name'] for c in inspector.get_columns('tracked_items')]
-    print(f"DEBUG: tracked_items columns: {cols}")
     yield engine
     Base.metadata.drop_all(bind=engine)
 

@@ -100,11 +100,15 @@ def import_from_save(save_path: str | Path) -> dict:
                     removed += 1
                     logger.info("Soft deleted item: %s", tracked.market_hash_name)
 
+            other_save_keys = {
+                k[1] for k in save_item_keys if k[0] in other_appids
+            }
             reactivated_count = (
                 db.query(TrackedItem)
                 .filter(
                     TrackedItem.appid.in_(other_appids),
                     TrackedItem.removed_at.isnot(None),
+                    TrackedItem.market_hash_name.in_(other_save_keys),
                 )
                 .update({TrackedItem.removed_at: None}, synchronize_session=False)
             )

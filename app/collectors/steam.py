@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import random
 import time
 from typing import Any
 
@@ -15,6 +16,7 @@ STEAM_PRICE_OVERVIEW_URL = "https://steamcommunity.com/market/priceoverview/"
 class SteamCollector:
     def __init__(self) -> None:
         self._client: httpx.AsyncClient | None = None
+        self._client_lock: asyncio.Lock = asyncio.Lock()
         self._currency = settings.STEAM_CURRENCY
         self._delay = settings.COLLECTOR_DELAY_SECONDS
         self._max_retries = settings.COLLECTOR_MAX_RETRIES
@@ -26,26 +28,35 @@ class SteamCollector:
         return self._rate_limited_until
 
     async def _get_client(self) -> httpx.AsyncClient:
-        if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(
-                timeout=30.0,
-                headers={
-                    "User-Agent": (
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                        "AppleWebKit/537.36 (KHTML, like Gecko) "
-                        "Chrome/120.0.0.0 Safari/537.36"
-                    ),
-                    "Accept-Language": "en-US,en;q=0.9",
-                },
-            )
-        return self._client
+        async with self._client_lock:
+            if self._client is None or self._client.is_closed:
+                self._client = httpx.AsyncClient(
+                    timeout=30.0,
+                    headers={
+                        "User-Agent": (
+                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                            "AppleWebKit/537.36 (KHTML, like Gecko) "
+                            "Chrome/120.0.0.0 Safari/537.36"
+                        ),
+                        "Accept-Language": "en-US,en;q=0.9",
+                    },
+                )
+            return self._client
 
     async def close(self) -> None:
         if self._client and not self._client.is_closed:
             await self._client.aclose()
 
+    def _jitter(self, base: float) -> float:
+        return base + random.uniform(0, base * 0.3)
+
     async def fetch_price(self, appid: int, market_hash_name: str) -> dict[str, Any]:
-        client = await self._get_client()
+        try:
+            client = await self._get_client()
+        except httpx.RequestError as exc:
+            logger.error("Failed to create HTTP client for %s: %s", market_hash_name, exc)
+            return {"success": False, "error": str(exc)}
+
         params = {
             "appid": appid,
             "currency": self._currency,
@@ -61,6 +72,14 @@ class SteamCollector:
             await asyncio.sleep(wait)
 
         for attempt in range(1, self._max_retries + 1):
+            if self._rate_limited_until > time.time():
+                wait = self._rate_limited_until - time.time()
+                logger.info(
+                    "Aguardando rate limit global: %.1fs antes de tentar %s (tentativa %s)",
+                    wait, market_hash_name, attempt,
+                )
+                await asyncio.sleep(wait)
+
             try:
                 response = await client.get(STEAM_PRICE_OVERVIEW_URL, params=params)
                 response.raise_for_status()
@@ -78,7 +97,7 @@ class SteamCollector:
             except httpx.HTTPStatusError as exc:
                 status = exc.response.status_code
                 if status == 429:
-                    wait = (self._backoff_factor ** attempt) * 5
+                    wait = self._jitter((self._backoff_factor ** attempt) * 5)
                     self._rate_limited_until = time.time() + wait + 30
                     logger.warning(
                         "Rate limited (429) para %s — aguardando %.1fs "
@@ -86,7 +105,7 @@ class SteamCollector:
                         market_hash_name, wait, int(self._rate_limited_until - time.time()),
                     )
                 else:
-                    wait = self._backoff_factor ** attempt
+                    wait = self._jitter(self._backoff_factor ** attempt)
                     logger.warning(
                         "HTTP %s for %s (attempt %s/%s, wait %.1fs)",
                         status, market_hash_name, attempt, self._max_retries, wait,
@@ -106,9 +125,7 @@ class SteamCollector:
 
             finally:
                 if attempt < self._max_retries:
-                    await asyncio.sleep(self._delay)
-
-        return {"success": False}
+                    await asyncio.sleep(self._jitter(self._delay))
 
     @staticmethod
     def _parse_response(data: dict[str, Any]) -> dict[str, Any]:
@@ -125,11 +142,19 @@ class SteamCollector:
             except (ValueError, AttributeError):
                 return None
 
+        def parse_volume(value: str | None) -> int | None:
+            if value is None:
+                return None
+            try:
+                return int(value.replace(",", "").strip())
+            except (ValueError, AttributeError):
+                return None
+
         return {
             "success": True,
             "lowest_price": parse_price(lowest_price),
             "median_price": parse_price(median_price),
-            "volume": int(volume.replace(",", "")) if volume else None,
+            "volume": parse_volume(volume),
         }
 
 

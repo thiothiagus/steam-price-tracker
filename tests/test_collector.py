@@ -115,6 +115,19 @@ class TestSteamCollectorParseResponse:
         assert result["volume"] == 1234
 
 
+def _make_mock_response(json_data=None, status_code=200):
+    """Create a mock httpx.Response."""
+    mock_resp = MagicMock(spec=httpx.Response)
+    mock_resp.status_code = status_code
+    mock_resp.json.return_value = json_data or {}
+    mock_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+        message=f"HTTP {status_code}",
+        request=MagicMock(),
+        response=mock_resp,
+    ) if status_code >= 400 else None
+    return mock_resp
+
+
 @pytest.mark.asyncio
 class TestSteamCollectorFetchPrice:
     """Test SteamCollector fetch_price method."""
@@ -128,66 +141,74 @@ class TestSteamCollectorFetchPrice:
         test_collector._backoff_factor = 0.1
         return test_collector
 
-    async def test_fetch_price_success(self, mock_collector: SteamCollector, respx_mock):
+    async def test_fetch_price_success(self, mock_collector: SteamCollector):
         """Test successful price fetch."""
-        respx_mock.get("https://steamcommunity.com/market/priceoverview/").mock(
-            return_value=Response(
-                200,
-                json={
-                    "success": True,
-                    "lowest_price": "R$ 150,00",
-                    "median_price": "R$ 155,00",
-                    "volume": "100",
-                },
-            )
-        )
-        
-        result = await mock_collector.fetch_price(730, "AK-47 | Redline (Field-Tested)")
-        
+        mock_resp = _make_mock_response({
+            "success": True,
+            "lowest_price": "R$ 150,00",
+            "median_price": "R$ 155,00",
+            "volume": "100",
+        })
+
+        mock_client = AsyncMock()
+        mock_client.get.return_value = mock_resp
+
+        with patch.object(mock_collector, "_get_client", return_value=mock_client):
+            result = await mock_collector.fetch_price(730, "AK-47 | Redline (Field-Tested)")
+
         assert result["success"] is True
         assert result["lowest_price"] == 150.0
         assert result["median_price"] == 155.0
         assert result["volume"] == 100
 
-    async def test_fetch_price_steam_returns_failure(self, mock_collector: SteamCollector, respx_mock):
+    async def test_fetch_price_steam_returns_failure(self, mock_collector: SteamCollector):
         """Test when Steam API returns success=false."""
-        respx_mock.get("https://steamcommunity.com/market/priceoverview/").mock(
-            return_value=Response(200, json={"success": False})
-        )
-        
-        result = await mock_collector.fetch_price(730, "Test Item")
-        
+        mock_resp = _make_mock_response({"success": False})
+
+        mock_client = AsyncMock()
+        mock_client.get.return_value = mock_resp
+
+        with patch.object(mock_collector, "_get_client", return_value=mock_client):
+            result = await mock_collector.fetch_price(730, "Test Item")
+
         assert result["success"] is False
         assert "error" not in result
 
-    async def test_fetch_price_http_error(self, mock_collector: SteamCollector, respx_mock):
+    async def test_fetch_price_http_error(self, mock_collector: SteamCollector):
         """Test handling of HTTP errors."""
-        respx_mock.get("https://steamcommunity.com/market/priceoverview/").mock(
-            return_value=Response(500, text="Internal Server Error")
+        mock_resp = MagicMock(spec=httpx.Response)
+        mock_resp.status_code = 500
+        mock_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+            message="HTTP 500",
+            request=MagicMock(),
+            response=mock_resp,
         )
-        
-        result = await mock_collector.fetch_price(730, "Test Item")
-        
+
+        mock_client = AsyncMock()
+        mock_client.get.return_value = mock_resp
+
+        with patch.object(mock_collector, "_get_client", return_value=mock_client):
+            result = await mock_collector.fetch_price(730, "Test Item")
+
         assert result["success"] is False
 
-    async def test_fetch_price_rate_limit(self, mock_collector: SteamCollector, respx_mock):
+    async def test_fetch_price_rate_limit(self, mock_collector: SteamCollector):
         """Test rate limit handling."""
         mock_collector._rate_limited_until = time.time() + 100
-        
-        respx_mock.get("https://steamcommunity.com/market/priceoverview/").mock(
-            return_value=Response(
-                200,
-                json={
-                    "success": True,
-                    "lowest_price": "R$ 100,00",
-                    "median_price": "R$ 105,00",
-                    "volume": "50",
-                },
-            )
-        )
-        
-        result = await mock_collector.fetch_price(730, "Test Item")
-        
+
+        mock_resp = _make_mock_response({
+            "success": True,
+            "lowest_price": "R$ 100,00",
+            "median_price": "R$ 105,00",
+            "volume": "50",
+        })
+
+        mock_client = AsyncMock()
+        mock_client.get.return_value = mock_resp
+
+        with patch.object(mock_collector, "_get_client", return_value=mock_client):
+            result = await mock_collector.fetch_price(730, "Test Item")
+
         assert result["success"] is True
         assert result["lowest_price"] == 100.0
 
@@ -201,27 +222,32 @@ class TestSteamCollectorFetchPrice:
             result = await mock_collector.fetch_price(730, "Test Item")
             assert result["success"] is False
 
-    async def test_fetch_price_with_retry(self, mock_collector: SteamCollector, respx_mock):
+    async def test_fetch_price_with_retry(self, mock_collector: SteamCollector):
         """Test retry mechanism on transient failure."""
-        route = respx_mock.get("https://steamcommunity.com/market/priceoverview/")
-        route.side_effect = [
-            httpx.HTTPStatusError("Service Unavailable", request=MagicMock(), response=Response(503)),
-            Response(
-                200,
-                json={
-                    "success": True,
-                    "lowest_price": "R$ 200,00",
-                    "median_price": "R$ 205,00",
-                    "volume": "75",
-                },
-            ),
-        ]
-        
-        result = await mock_collector.fetch_price(730, "Test Item")
-        
+        error_resp = MagicMock(spec=httpx.Response)
+        error_resp.status_code = 503
+        error_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+            message="HTTP 503",
+            request=MagicMock(),
+            response=error_resp,
+        )
+
+        success_resp = _make_mock_response({
+            "success": True,
+            "lowest_price": "R$ 200,00",
+            "median_price": "R$ 205,00",
+            "volume": "75",
+        })
+
+        mock_client = AsyncMock()
+        mock_client.get.side_effect = [error_resp, success_resp]
+
+        with patch.object(mock_collector, "_get_client", return_value=mock_client):
+            result = await mock_collector.fetch_price(730, "Test Item")
+
         assert result["success"] is True
         assert result["lowest_price"] == 200.0
-        assert route.call_count == 2
+        assert mock_client.get.call_count == 2
 
     async def test_close_collector(self, mock_collector: SteamCollector):
         """Test closing the collector client."""

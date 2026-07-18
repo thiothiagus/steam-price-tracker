@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class TrackedItemCreate(BaseModel):
@@ -9,26 +9,24 @@ class TrackedItemCreate(BaseModel):
 
 
 class TrackedItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     appid: int
     market_hash_name: str
     enabled: bool
     removed_at: datetime | None = None
 
-    class Config:
-        from_attributes = True
-
 
 class PriceHistoryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     tracked_item_id: int
     price: float | None
     median_price: float | None
     volume: int | None
-    collected_at: str
-
-    class Config:
-        from_attributes = True
+    collected_at: datetime
 
 
 class PriceCollectResponse(BaseModel):

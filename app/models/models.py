@@ -5,6 +5,10 @@ from datetime import datetime, timezone
 from app.database.db import Base
 
 
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 class TrackedItem(Base):
     __tablename__ = "tracked_items"
 
@@ -18,7 +22,7 @@ class TrackedItem(Base):
     enabled = Column(Boolean, default=True, nullable=False)
     quantity = Column(Integer, default=1, nullable=False)
     created_at = Column(
-        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+        DateTime, default=_utcnow, nullable=False
     )
     removed_at = Column(DateTime, nullable=True)
 
@@ -41,7 +45,7 @@ class PriceHistory(Base):
     median_price = Column(Float, nullable=True)
     volume = Column(Integer, nullable=True)
     collected_at = Column(
-        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+        DateTime, default=_utcnow, nullable=False
     )
 
     tracked_item = relationship("TrackedItem", back_populates="price_records")

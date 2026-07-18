@@ -1,11 +1,15 @@
 import re
 import time
 import os
+import logging
 from pathlib import Path
 from threading import Lock
 from typing import Any
+from urllib.parse import quote
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 STEAM_ICON_BASE = "https://community.steamstatic.com/economy/image/"
 
@@ -50,7 +54,7 @@ def fetch_steam_item_icon(appid: int, market_hash_name: str) -> str | None:
         return f"/static/icons/{safe_name}.png"
 
     try:
-        market_name = market_hash_name.replace(" ", "%20").replace("&", "%26")
+        market_name = quote(market_hash_name, safe='')
         url = f"https://steamcommunity.com/market/listings/{appid}/{market_name}"
 
         with httpx.Client(timeout=15.0, follow_redirects=True) as client:
@@ -65,8 +69,8 @@ def fetch_steam_item_icon(appid: int, market_hash_name: str) -> str | None:
                     _cache[cache_key] = (time.time(), icon_url)
                 return icon_url
 
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Failed to fetch icon for %s: %s", market_hash_name, e)
 
     with _FAILED_LOCK:
         _FAILED_CACHE[cache_key] = time.time()
@@ -92,18 +96,22 @@ def fetch_and_save_icon(appid: int, market_hash_name: str) -> str | None:
         with httpx.Client(timeout=20.0) as client:
             response = client.get(icon_url, headers={"User-Agent": "Mozilla/5.0"})
             if response.status_code == 200 and len(response.content) > 1000:
+                local_icon_path.parent.mkdir(parents=True, exist_ok=True)
                 with open(local_icon_path, "wb") as f:
                     f.write(response.content)
 
-                app_icons_dir = Path(__file__).resolve().parent.parent / "data" / "icons"
-                app_icons_dir.mkdir(parents=True, exist_ok=True)
-                app_copy = app_icons_dir / f"{safe_name}.png"
-                with open(app_copy, "wb") as f:
-                    f.write(response.content)
+                try:
+                    app_icons_dir = Path(__file__).resolve().parent.parent / "data" / "icons"
+                    app_icons_dir.mkdir(parents=True, exist_ok=True)
+                    app_copy = app_icons_dir / f"{safe_name}.png"
+                    with open(app_copy, "wb") as f:
+                        f.write(response.content)
+                except Exception as e:
+                    logger.debug("Failed to save icon copy to app/data: %s", e)
 
                 return f"/static/icons/{safe_name}.png"
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Failed to download icon for %s: %s", market_hash_name, e)
 
     return icon_url
 

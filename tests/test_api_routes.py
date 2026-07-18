@@ -2,6 +2,7 @@
 Tests for API routes.
 """
 import pytest
+from unittest.mock import AsyncMock, MagicMock
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
 from sqlalchemy.orm import Session
@@ -126,21 +127,19 @@ class TestPriceHistoryEndpoints:
 class TestCollectionEndpoints:
     """Test collection-related endpoints."""
 
-    @pytest.mark.asyncio
     def test_collect_item_price(self, client: TestClient, sample_tracked_item, monkeypatch):
         """Test triggering price collection for a single item."""
         mock_collect = AsyncMock(return_value={
             "success": True,
             "lowest_price": 150.0,
             "median_price": 155.0,
-            "volume": "100",
+            "volume": 100,
         })
         monkeypatch.setattr("app.api.routes.collect_single_item", mock_collect)
         
         response = client.post(f"/api/items/{sample_tracked_item.id}/collect")
         assert response.status_code == 200
 
-    @pytest.mark.asyncio
     def test_collect_all_prices(self, client: TestClient, monkeypatch):
         """Test triggering full price collection."""
         mock_collect = AsyncMock(return_value={
@@ -149,7 +148,7 @@ class TestCollectionEndpoints:
             "collected": 5,
             "total": 5,
         })
-        monkeypatch.setattr("app.api.routes.collect_all_prices", mock_collect)
+        monkeypatch.setattr("app.services.collector_service.collect_all_prices", mock_collect)
         
         response = client.post("/api/collect")
         assert response.status_code == 200
@@ -194,7 +193,7 @@ class TestSaveWatcherEndpoints:
         mock_parser.get_collected_items_for_import.return_value = [
             {"appid": 730, "market_hash_name": "Test Item", "quantity": 5}
         ]
-        monkeypatch.setattr("app.api.routes.SaveParser", lambda x: mock_parser)
+        monkeypatch.setattr("app.utils.save_parser.SaveParser", lambda x: mock_parser)
         
         response = client.get("/api/import-preview")
         assert response.status_code == 200

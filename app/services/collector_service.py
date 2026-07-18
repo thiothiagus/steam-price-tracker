@@ -8,10 +8,12 @@ from app.database.db import SessionLocal
 from app.models.models import TrackedItem, PriceHistory
 from app.collectors.steam import collector
 from app.config import settings
+import app.state as state
 
 logger = logging.getLogger(__name__)
 
 REFRESH_HOURS = settings.COLLECTOR_REFRESH_HOURS
+MAX_ITEMS_PER_RUN = settings.COLLECTOR_MAX_ITEMS_PER_RUN
 
 
 def _get_items_to_collect(db: Session, force: bool = False) -> list[TrackedItem]:
@@ -44,11 +46,17 @@ def _get_items_to_collect(db: Session, force: bool = False) -> list[TrackedItem]
 
 
 async def collect_all_prices(force: bool = False) -> dict:
+    if not state.acquire_collection_lock():
+        msg = "Coleta já em execução. Ignorando nova requisição."
+        logger.info(msg)
+        return {"success": False, "message": msg, "already_collecting": True}
+    
     now = time.time()
-    if force and collector.rate_limited_until > now:
+    if collector.rate_limited_until > now:
         remaining = int(collector.rate_limited_until - now)
         msg = f"Rate limit ativo. Aguarde {remaining}s antes de coletar novamente."
         logger.warning(msg)
+        state.release_collection_lock()
         return {"success": False, "message": msg, "cooldown_remaining": remaining}
 
     db: Session = SessionLocal()
@@ -57,23 +65,24 @@ async def collect_all_prices(force: bool = False) -> dict:
         if not items:
             msg = "Todos os itens já foram atualizados nas últimas %d horas." % REFRESH_HOURS
             logger.info(msg)
-            from app.state import collection_state
-            collection_state = {"collecting": False, "collected": 0, "total": 0, "last_collection": True}
+            state.collection_state = {"collecting": False, "collected": 0, "total": 0, "last_collection": True}
+            state.release_collection_lock()
             return {"success": True, "message": msg, "collected": 0, "total": 0}
+
+        items = items[:MAX_ITEMS_PER_RUN]
 
         logger.info(
             "Coletando preços: %s itens (%s itens no total)",
             len(items), db.query(TrackedItem).filter(TrackedItem.enabled.is_(True)).count(),
         )
 
-        from app.state import collection_state
-        collection_state = {"collecting": True, "collected": 0, "total": len(items)}
+        state.collection_state = {"collecting": True, "collected": 0, "total": len(items)}
 
         collected = 0
         for item in items:
             if collector.rate_limited_until > time.time():
                 logger.warning("Rate limit atingido. Coleta interrompida.")
-                collection_state["collecting"] = False
+                state.collection_state["collecting"] = False
                 break
 
             result = await collector.fetch_price(item.appid, item.market_hash_name)
@@ -87,7 +96,7 @@ async def collect_all_prices(force: bool = False) -> dict:
                 )
                 db.add(record)
                 collected += 1
-                collection_state["collected"] = collected
+                state.collection_state["collected"] = collected
                 logger.info(
                     "  [%d/%d] %s: R$ %.2f (vol=%s)",
                     collected, len(items),
@@ -101,15 +110,18 @@ async def collect_all_prices(force: bool = False) -> dict:
         if collected < len(items):
             msg += " Coleta interrompida por rate limit."
 
-        collection_state = {"collecting": False, "collected": collected, "total": len(items), "last_collection": True}
+        state.collection_state = {"collecting": False, "collected": collected, "total": len(items), "last_collection": True}
         logger.info("Coleta finalizada: %s", msg)
+        
+        state.release_collection_lock()
+        
         return {"success": True, "message": msg, "collected": collected, "total": len(items)}
 
     except Exception:
         db.rollback()
         logger.exception("Erro durante coleta de preços.")
-        from app.state import collection_state
-        collection_state = {"collecting": False, "collected": 0, "total": 0}
+        state.collection_state = {"collecting": False, "collected": 0, "total": 0}
+        state.release_collection_lock()
         return {"success": False, "message": "Erro interno durante coleta."}
     finally:
         db.close()

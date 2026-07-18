@@ -169,7 +169,8 @@ def collection_cooldown():
 
 
 @router.post("/import-save")
-def import_save():
+async def import_save():
+    import asyncio
     from app.services.import_service import import_from_save
     from app.config import settings
 
@@ -180,7 +181,8 @@ def import_save():
             detail="Save file not found. Copy SaveFile_Live.es3 to the project root.",
         )
 
-    result = import_from_save(save_path)
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(None, import_from_save, save_path)
     return result
 
 
@@ -236,21 +238,24 @@ def import_preview():
 
     db = SessionLocal()
     try:
-        existing = set()
-        for item in items:
-            found = (
-                db.query(TrackedItem)
+        if items:
+            keys = [(item["appid"], item["market_hash_name"]) for item in items]
+            appids = {item["appid"] for item in items}
+
+            existing_items = (
+                db.query(TrackedItem.appid, TrackedItem.market_hash_name)
                 .filter(
-                    TrackedItem.appid == item["appid"],
-                    TrackedItem.market_hash_name == item["market_hash_name"],
+                    TrackedItem.appid.in_(appids),
+                    TrackedItem.market_hash_name.in_([k[1] for k in keys]),
                 )
-                .first()
+                .all()
             )
-            if found:
-                existing.add(item["market_hash_name"])
+            existing_set = {(e.appid, e.market_hash_name) for e in existing_items}
+        else:
+            existing_set = set()
 
         for item in items:
-            item["already_tracked"] = item["market_hash_name"] in existing
+            item["already_tracked"] = (item["appid"], item["market_hash_name"]) in existing_set
     finally:
         db.close()
 

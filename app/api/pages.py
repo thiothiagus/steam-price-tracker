@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, func, literal_column
 from datetime import datetime, timedelta, timezone
 
 from app.config import settings
@@ -28,17 +28,41 @@ def calculate_revenue(price: float) -> float:
     return price * FEE_MULTIPLIER
 
 
+def _get_latest_prices(items: list[TrackedItem], db: Session) -> dict[int, PriceHistory]:
+    """Fetch the latest PriceHistory record for each item in a single query."""
+    if not items:
+        return {}
+
+    item_ids = [item.id for item in items]
+
+    subq = (
+        db.query(
+            PriceHistory.tracked_item_id,
+            func.max(PriceHistory.id).label("max_id"),
+        )
+        .filter(PriceHistory.tracked_item_id.in_(item_ids))
+        .group_by(PriceHistory.tracked_item_id)
+        .subquery()
+    )
+
+    rows = (
+        db.query(PriceHistory)
+        .join(subq, PriceHistory.id == subq.c.max_id)
+        .all()
+    )
+
+    return {row.tracked_item_id: row for row in rows}
+
+
 def _build_items_data(items: list[TrackedItem], db: Session) -> list[dict]:
     now = datetime.now(timezone.utc)
     cutoff = now - STALE_CUTOFF
+
+    latest_map = _get_latest_prices(items, db)
+
     data = []
     for item in items:
-        latest = (
-            db.query(PriceHistory)
-            .filter(PriceHistory.tracked_item_id == item.id)
-            .order_by(PriceHistory.collected_at.desc())
-            .first()
-        )
+        latest = latest_map.get(item.id)
         raw_collected_at = latest.collected_at if latest else None
         if raw_collected_at is not None and raw_collected_at.tzinfo is None:
             collected_at = raw_collected_at.replace(tzinfo=timezone.utc)
@@ -99,6 +123,8 @@ def _stats(items: list[TrackedItem], db: Session) -> dict:
     total_items = len(items)
     active_items = sum(1 for i in items if i.enabled)
 
+    latest_map = _get_latest_prices(items, db)
+
     total_inventory_value = 0.0
     total_inventory_value_after_fees = 0.0
     items_with_price = 0
@@ -107,12 +133,7 @@ def _stats(items: list[TrackedItem], db: Session) -> dict:
     highest_value = 0.0
 
     for item in items:
-        latest = (
-            db.query(PriceHistory)
-            .filter(PriceHistory.tracked_item_id == item.id)
-            .order_by(PriceHistory.collected_at.desc())
-            .first()
-        )
+        latest = latest_map.get(item.id)
         qty = item.quantity if item.quantity else 1
         total_quantity += qty
 
@@ -219,7 +240,7 @@ def item_detail(request: Request, item_id: int, db: Session = Depends(get_db)):
         "count": len(records),
     }
 
-    chart_labels = [r.collected_at.strftime("%d/%m %H:%M") for r in records]
+    chart_labels = [r.collected_at.strftime("%d/%m %H:%M") if r.collected_at else "" for r in records]
     chart_prices = [r.price for r in records]
     chart_medians = [r.median_price for r in records]
 
