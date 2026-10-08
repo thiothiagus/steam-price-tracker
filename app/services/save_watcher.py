@@ -157,15 +157,10 @@ class SaveWatcher:
             if result["imported"]:
                 import asyncio
                 from app.services.collector_service import collect_all_prices
-                import app.state as state
-                if state.acquire_collection_lock():
-                    try:
-                        loop = asyncio.get_running_loop()
-                        loop.create_task(collect_all_prices(force=False))
-                    except RuntimeError:
-                        state.release_collection_lock()
-                        logger.warning("Nenhum event loop ativo, coleta automática ignorada.")
-                else:
-                    logger.info("Coleta já em execução, ignorando coleta automática após import.")
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(collect_all_prices(force=False))
+                except RuntimeError:
+                    logger.warning("Nenhum event loop ativo, coleta automática ignorada.")
         except Exception:
             logger.debug("Não foi possível extrair resumo do save.")

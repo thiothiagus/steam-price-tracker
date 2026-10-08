@@ -12,9 +12,7 @@ def acquire_collection_lock() -> bool:
     global collection_lock
     if collection_lock:
         return False
-    _collection_lock.acquire(blocking=False)
-    if collection_lock:
-        _collection_lock.release()
+    if not _collection_lock.acquire(blocking=False):
         return False
     collection_lock = True
     return True
